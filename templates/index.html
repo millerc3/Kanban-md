@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>kanban.md</title>
+    <meta name="description" content="A local-first, Markdown-native ticket tracker.">
+    <script>
+      (() => {
+        const saved = localStorage.getItem("kanban-md-theme");
+        const preferred = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = saved || preferred;
+      })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+  </head>
+  <body>
+    <main>
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">K</span>
+          <div>
+            <span class="eyebrow">KANBAN.MD</span>
+            <h1 id="project-name">No project open</h1>
+          </div>
+        </div>
+        <div class="top-actions">
+          <span class="notice" id="notice">Choose a directory containing .kanban</span>
+          <button class="button button-quiet theme-toggle" id="theme-toggle" aria-label="Switch color theme">
+            Theme
+          </button>
+          <button class="button button-primary" id="open-project">Open project</button>
+        </div>
+      </header>
+
+      <section class="project-picker" id="project-picker">
+        <div>
+          <span class="eyebrow">LOCAL PROJECT</span>
+          <h2>Open a Markdown board</h2>
+          <p>Choose a folder, or paste its path. Nothing leaves this computer.</p>
+        </div>
+        <div class="path-row">
+          <input id="project-path" placeholder="D:\Development\my-project">
+          <button class="button button-quiet" id="browse-project">Browse…</button>
+          <button class="button button-primary" id="load-project">Open</button>
+        </div>
+        <button class="text-button hidden" id="initialize-project">
+          No .kanban directory found — initialize this project
+        </button>
+      </section>
+
+      <section class="controls hidden" id="controls" aria-label="Board controls">
+        <label class="search">
+          <span>⌕</span>
+          <input id="search" placeholder="Search tickets, tags, and content">
+        </label>
+        <div class="filter-group" id="intervention-filter" aria-label="Human intervention filter">
+          <button class="filter active" data-level="all">All involvement</button>
+          <button class="filter" data-level="low">Low touch</button>
+          <button class="filter" data-level="medium">Collaborative</button>
+          <button class="filter" data-level="high">Human led</button>
+        </div>
+        <button class="button button-dark" id="new-ticket">+ New ticket</button>
+      </section>
+
+      <section class="board hidden" id="board" aria-label="Kanban board"></section>
+
+      <footer>
+        <span>Markdown is the database.</span>
+        <span id="ticket-total">Local-first · no account required</span>
+      </footer>
+    </main>
+
+    <div class="scrim hidden" id="ticket-scrim">
+      <aside class="drawer" id="ticket-drawer">
+        <button class="close" id="close-ticket" aria-label="Close">×</button>
+        <span class="drawer-id" id="drawer-id"></span>
+        <h2 id="drawer-title"></h2>
+        <div class="drawer-facts" id="drawer-facts"></div>
+        <div class="markdown-preview" id="drawer-body"></div>
+        <div class="status-mover">
+          <span>Move ticket</span>
+          <div id="status-mover"></div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="scrim modal-scrim hidden" id="create-scrim">
+      <section class="dialog">
+        <span class="eyebrow">NEW MARKDOWN TICKET</span>
+        <h2>Start with the durable facts.</h2>
+        <label>Ticket ID<input id="create-id" placeholder="PROJ-123"></label>
+        <label>Title<input id="create-title" placeholder="A clear outcome"></label>
+        <label>Category<input id="create-category" value="General"></label>
+        <label>
+          Human involvement
+          <select id="create-intervention">
+            <option value="low">Low touch</option>
+            <option value="medium">Collaborative</option>
+            <option value="high">Human led</option>
+          </select>
+        </label>
+        <div class="dialog-actions">
+          <button class="button button-quiet" id="cancel-create">Cancel</button>
+          <button class="button button-primary" id="submit-create">Create ticket</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="scrim modal-scrim hidden" id="folder-scrim">
+      <section class="dialog folder-dialog">
+        <span class="eyebrow">CHOOSE PROJECT DIRECTORY</span>
+        <h2 id="folder-current">Computer</h2>
+        <div class="folder-actions">
+          <button class="button button-quiet" id="folder-drives">Computer</button>
+          <button class="button button-quiet" id="folder-up">↑ Parent</button>
+        </div>
+        <div class="folder-list" id="folder-list"></div>
+        <div class="dialog-actions">
+          <button class="button button-quiet" id="cancel-folder">Cancel</button>
+          <button class="button button-primary" id="choose-folder">Use this folder</button>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

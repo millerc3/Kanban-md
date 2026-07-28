@@ -1,0 +1,5 @@
+version: 1
+name: kanban.md
+statuses: [inbox, ready, in_progress, blocked, review, done]
+categories: [Product, Storage, Interface]
+intervention_levels: [low, medium, high]
