@@ -228,6 +228,11 @@ footer {
   background: var(--input); border: 1px solid var(--line); border-radius: 7px; color: var(--ink);
   display: block; margin-top: 6px; min-height: 42px; padding: 0 11px; width: 100%;
 }
+.assigned-id {
+  background: var(--input); border: 1px solid var(--line); border-radius: 7px;
+  color: var(--muted); font-size: 12px; margin-bottom: 14px; padding: 11px;
+}
+.assigned-id strong { color: var(--ink); font-family: monospace; }
 .dialog-actions { gap: 8px; justify-content: flex-end; margin-top: 24px; }
 .folder-dialog { width: min(620px, 94vw); }
 .folder-dialog h2 {

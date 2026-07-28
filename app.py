@@ -10,7 +10,13 @@ from typing import Any
 
 from flask import Flask, jsonify, render_template, request
 
-from tools.regenerate_board import ValidationError, regenerate_board
+from tools.regenerate_board import (
+    DEFAULT_ID_PADDING,
+    ValidationError,
+    allocate_ticket_id,
+    regenerate_board,
+    ticket_number,
+)
 
 
 app = Flask(__name__)
@@ -22,6 +28,7 @@ ACTIVE_PROJECT: Path | None = None
 STATUSES = ("inbox", "ready", "in_progress", "blocked", "review", "done")
 INTERVENTION_LEVELS = ("low", "medium", "high")
 FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)\Z", re.DOTALL)
+ID_ALLOCATION_ATTEMPTS = 5
 
 
 def strip_quotes(value: str) -> str:
@@ -102,13 +109,13 @@ def ticket_from_file(path: Path) -> dict[str, Any] | None:
     }
 
 
-def atomic_write(path: Path, content: str) -> None:
+def atomic_write(path: Path, content: str, newline: str = "\n") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     handle, temporary_name = tempfile.mkstemp(
         dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", text=True
     )
     try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as temporary:
+        with os.fdopen(handle, "w", encoding="utf-8", newline=newline) as temporary:
             temporary.write(content)
             temporary.flush()
             os.fsync(temporary.fileno())
@@ -119,6 +126,56 @@ def atomic_write(path: Path, content: str) -> None:
         except FileNotFoundError:
             pass
         raise
+
+
+def exclusive_write(path: Path, content: str) -> None:
+    """Create a file, failing when another writer already claimed the name.
+
+    Ticket ids are reserved by winning this create, so a concurrent agent
+    cannot be handed the same id between the scan and the write.
+    """
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+    with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(content)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def record_id_sequence(kanban: Path, number: int) -> str | None:
+    """Raise the recorded high-water mark, returning the replaced file text.
+
+    board.yaml is edited a line at a time because the parser is deliberately
+    lossy: rewriting it would discard comments and unknown configuration.
+    """
+
+    path = kanban / "board.yaml"
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            original = handle.read()
+    except OSError:
+        return None
+
+    # Stop at the newline rather than at '$' so a CRLF file does not lose the
+    # carriage return on the one line being rewritten.
+    pattern = re.compile(r"^id_sequence:[^\n]*", re.MULTILINE)
+    match = pattern.search(original)
+    if match:
+        carriage = "\r" if match.group(0).endswith("\r") else ""
+        updated = (
+            original[: match.start()]
+            + f"id_sequence: {number}{carriage}"
+            + original[match.end() :]
+        )
+    else:
+        ending = "\r\n" if "\r\n" in original else "\n"
+        separator = "" if not original or original.endswith(("\n", "\r")) else ending
+        updated = f"{original}{separator}id_sequence: {number}{ending}"
+    if updated == original:
+        return None
+    atomic_write(path, updated, newline="")
+    return original
 
 
 def update_frontmatter(source: str, updates: dict[str, str]) -> str:
@@ -181,6 +238,19 @@ def ticket_path_by_id(project: Path, ticket_id: str) -> Path:
 def safe_slug(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return slug or "ticket"
+
+
+def default_id_prefix(name: str) -> str:
+    """Derive a short ticket prefix from a project directory name."""
+
+    words = re.sub(r"[^A-Za-z0-9]+", " ", name).split()
+    if not words:
+        return "TASK"
+    candidate = (
+        words[0][:4] if len(words) == 1 else "".join(word[0] for word in words)[:4]
+    )
+    candidate = candidate.upper()
+    return candidate if candidate[0].isalpha() else f"T{candidate}"
 
 
 @app.get("/")
@@ -275,6 +345,9 @@ def initialize_project():
                     f"statuses: [{', '.join(STATUSES)}]",
                     "categories: []",
                     f"intervention_levels: [{', '.join(INTERVENTION_LEVELS)}]",
+                    f"id_prefix: {default_id_prefix(project.name)}",
+                    f"id_padding: {DEFAULT_ID_PADDING}",
+                    "id_sequence: 0",
                     "",
                 )
             ),
@@ -290,31 +363,24 @@ def list_tickets():
         return jsonify({"error": str(error)}), 409
 
 
-@app.post("/api/tickets")
-def create_ticket():
-    project = selected_project()
-    payload = request.get_json(silent=True) or {}
-    ticket_id = str(payload.get("id", "")).strip()
-    title = str(payload.get("title", "")).strip()
-    category = str(payload.get("category", "")).strip() or "General"
-    intervention = str(payload.get("intervention", "low"))
-
-    if not ticket_id or not title:
-        return jsonify({"error": "Ticket ID and title are required"}), 400
-    if intervention not in INTERVENTION_LEVELS:
-        return jsonify({"error": "Invalid intervention level"}), 400
-
+@app.get("/api/next-id")
+def next_id():
+    try:
+        project = selected_project()
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 409
     with PROJECT_LOCK:
-        tickets_directory = project / ".kanban" / "tickets"
         try:
-            ticket_path_by_id(project, ticket_id)
-            return jsonify({"error": f"Ticket {ticket_id} already exists"}), 409
-        except FileNotFoundError:
-            pass
+            return jsonify({"id": allocate_ticket_id(project / ".kanban")})
+        except ValidationError as error:
+            return jsonify({"error": error.messages[0]}), 422
 
-        file_path = tickets_directory / f"{ticket_id}-{safe_slug(title)}.md"
-        today = date.today().isoformat()
-        source = f"""---
+
+def new_ticket_source(
+    ticket_id: str, title: str, category: str, intervention: str
+) -> str:
+    today = date.today().isoformat()
+    return f"""---
 id: {ticket_id}
 title: {title}
 status: inbox
@@ -345,11 +411,75 @@ Add the project knowledge an agent needs before starting.
 
 State any decisions, editor wiring, art, review, or testing needed from a person.
 """
-        atomic_write(file_path, source)
+
+
+def reserve_ticket_id(kanban: Path, title: str, build_source) -> tuple[str, Path]:
+    """Claim the next project id by winning an exclusive create.
+
+    The id is only ever handed out together with the file that holds it, so a
+    crash cannot leave a reserved-but-empty ticket behind.
+    """
+
+    tickets_directory = kanban / "tickets"
+    for _ in range(ID_ALLOCATION_ATTEMPTS):
+        ticket_id = allocate_ticket_id(kanban)
+        file_path = tickets_directory / f"{ticket_id}-{safe_slug(title)}.md"
         try:
-            regenerate_board(project / ".kanban")
+            exclusive_write(file_path, build_source(ticket_id))
+        except FileExistsError:
+            continue
+        return ticket_id, file_path
+    raise FileExistsError("could not reserve a ticket id")
+
+
+@app.post("/api/tickets")
+def create_ticket():
+    project = selected_project()
+    payload = request.get_json(silent=True) or {}
+    title = str(payload.get("title", "")).strip()
+    category = str(payload.get("category", "")).strip() or "General"
+    intervention = str(payload.get("intervention", "low"))
+
+    if str(payload.get("id", "")).strip():
+        return jsonify(
+            {"error": "Ticket IDs are assigned by the project and cannot be chosen"}
+        ), 400
+    if not title:
+        return jsonify({"error": "A ticket title is required"}), 400
+    if intervention not in INTERVENTION_LEVELS:
+        return jsonify({"error": "Invalid intervention level"}), 400
+
+    with PROJECT_LOCK:
+        kanban = project / ".kanban"
+        try:
+            ticket_id, file_path = reserve_ticket_id(
+                kanban,
+                title,
+                lambda assigned: new_ticket_source(
+                    assigned, title, category, intervention
+                ),
+            )
+        except ValidationError as error:
+            return jsonify(
+                {
+                    "error": "Board validation failed; no ticket ID was assigned.",
+                    "details": error.messages,
+                }
+            ), 422
+        except FileExistsError:
+            return jsonify(
+                {"error": "Could not reserve a ticket ID. Please try again."}
+            ), 409
+
+        prefix = ticket_id.rpartition("-")[0]
+        number = ticket_number(ticket_id, prefix) if prefix else None
+        previous_config = record_id_sequence(kanban, number) if number else None
+        try:
+            regenerate_board(kanban)
         except ValidationError as error:
             file_path.unlink()
+            if previous_config is not None:
+                atomic_write(kanban / "board.yaml", previous_config)
             return jsonify(
                 {
                     "error": "Board validation failed; the ticket was not created.",

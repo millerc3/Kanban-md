@@ -11,7 +11,8 @@ database.
 ├── board.yaml
 ├── board.md
 ├── tools/
-│   └── regenerate_board.py
+│   ├── regenerate_board.py
+│   └── migrate_ticket_ids.py
 ├── tickets/
 │   └── PROJ-123-descriptive-title.md
 └── archive/
@@ -23,6 +24,8 @@ database.
   authoritative and must never be manually edited.
 - `tools/regenerate_board.py` is the portable, standard-library-only board
   generator.
+- `tools/migrate_ticket_ids.py` adopts project-assigned ticket ids in a project
+  that used its own numbering.
 - `tickets/` contains every active ticket in one flat directory.
 - `archive/` contains completed tickets retained by the developer.
 
@@ -50,11 +53,65 @@ Validation failures must be fixed in the authoritative ticket files, never in
 The `id` field is the immutable identity. Filenames are descriptive and may
 change without changing ticket identity.
 
+Ids are assigned by the project rather than chosen per ticket. `board.yaml`
+declares the scheme:
+
+```yaml
+id_prefix: KMD
+id_padding: 3
+id_sequence: 12
+```
+
+- `id_prefix` is the project-wide prefix. Ids take the form `PREFIX-<number>`.
+- `id_padding` is the zero-padded width of the number. Numbers wider than the
+  padding are written in full, and `KMD-9` still sorts before `KMD-10`.
+- `id_sequence` is the high-water mark. The next id is one more than the larger
+  of this value and the highest number found across active and archived
+  tickets, so deleting a ticket never hands its number to a new one.
+
+All three fields are optional. A project without `id_prefix` keeps whatever ids
+its tickets already use, and the application refuses to assign new ones until
+the scheme is adopted.
+
+To read the next id without writing anything:
+
+```sh
+python3 .kanban/tools/regenerate_board.py --next-id
+```
+
+Ids that predate the scheme stay valid. `--strict-ids` reports them when you
+want that enforced:
+
+```sh
+python3 .kanban/tools/regenerate_board.py --check --strict-ids
+```
+
+### Adopting the scheme in an existing project
+
+`tools/migrate_ticket_ids.py` migrates a project that used its own numbering.
+It previews the change and writes nothing until `--apply` is given, and it
+keeps a timestamped backup of `.kanban` when it does.
+
+```sh
+python3 .kanban/tools/migrate_ticket_ids.py --adopt --prefix KMD
+```
+
+`--adopt` is the default and the least disruptive option: it records the scheme
+in `board.yaml` and seeds `id_sequence` above every existing id. No ticket file
+is touched, existing ids keep working, and only new tickets follow the scheme.
+
+`--renumber` additionally rewrites ids that do not match the scheme, remapping
+every `blocked_by` reference and renaming the affected files. Ids that already
+match keep their number. `--renumber-all` instead assigns a clean sequence to
+every ticket. Both record the previous id as `legacy_id` and report — without
+rewriting — any old id still mentioned in ticket prose.
+
 ## Core frontmatter
 
 ```yaml
 ---
 id: PROJ-123
+legacy_id: NET-7
 title: Replicate the sacrifice wallet
 status: ready
 category: Networking
@@ -143,6 +200,8 @@ and body sections must be preserved by the application.
 - The schema is additive and forgiving.
 - Unknown fields are retained.
 - Missing status defaults to `inbox`.
+- `legacy_id` is optional and records the id a ticket carried before migration.
+  It is never used for lookup or dependency resolution.
 - Missing category defaults to `Uncategorized`.
 - Missing or invalid intervention currently defaults to `medium` and should be
   surfaced by future validation.

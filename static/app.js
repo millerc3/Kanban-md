@@ -349,21 +349,33 @@ byId("intervention-filter").addEventListener("click", (event) => {
   document.querySelectorAll(".filter").forEach((item) => item.classList.toggle("active", item === button));
   renderBoard();
 });
-byId("new-ticket").addEventListener("click", () => byId("create-scrim").classList.remove("hidden"));
+async function showNextId() {
+  const label = byId("create-id");
+  label.textContent = "…";
+  try {
+    label.textContent = (await api("/api/next-id")).id;
+  } catch (error) {
+    label.textContent = "unavailable";
+    setNotice(error.message, true);
+  }
+}
+
+byId("new-ticket").addEventListener("click", () => {
+  byId("create-scrim").classList.remove("hidden");
+  showNextId();
+});
 byId("cancel-create").addEventListener("click", () => byId("create-scrim").classList.add("hidden"));
 byId("submit-create").addEventListener("click", async () => {
   try {
     const ticket = await api("/api/tickets", {
       method: "POST",
       body: JSON.stringify({
-        id: byId("create-id").value,
         title: byId("create-title").value,
         category: byId("create-category").value,
         intervention: byId("create-intervention").value,
       }),
     });
     state.tickets.push(ticket);
-    byId("create-id").value = "";
     byId("create-title").value = "";
     byId("create-scrim").classList.add("hidden");
     setNotice(`${ticket.id} created in Inbox`);

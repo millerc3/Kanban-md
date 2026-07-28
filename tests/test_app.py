@@ -20,6 +20,18 @@ class KanbanApiTests(unittest.TestCase):
     def post_json(self, path, payload=None):
         return self.client.post(path, json=payload or {})
 
+    def open_and_initialize(self):
+        self.post_json("/api/open", {"path": str(self.project)})
+        self.post_json("/api/initialize")
+
+    def create(self, title="A ticket", **overrides):
+        payload = {"title": title, "category": "Testing", "intervention": "low"}
+        payload.update(overrides)
+        return self.post_json("/api/tickets", payload)
+
+    def board_yaml(self):
+        return (self.project / ".kanban" / "board.yaml").read_text(encoding="utf-8")
+
     def test_project_lifecycle(self):
         opened = self.post_json("/api/open", {"path": str(self.project)})
         self.assertEqual(opened.status_code, 200)
@@ -29,19 +41,13 @@ class KanbanApiTests(unittest.TestCase):
         self.assertEqual(initialized.status_code, 200)
         self.assertTrue(initialized.get_json()["initialized"])
         self.assertTrue((self.project / ".kanban" / "board.yaml").is_file())
+        self.assertIn("id_prefix: ", self.board_yaml())
 
-        created = self.post_json(
-            "/api/tickets",
-            {
-                "id": "TEST-1",
-                "title": "Verify the Flask board",
-                "category": "Testing",
-                "intervention": "low",
-            },
-        )
+        created = self.create("Verify the Flask board")
         self.assertEqual(created.status_code, 201)
         ticket = created.get_json()
         self.assertEqual(ticket["status"], "inbox")
+        self.assertTrue(ticket["id"].endswith("-001"), ticket["id"])
         kanban = self.project / ".kanban"
         ticket_path = next((kanban / "tickets").glob("*.md"))
         self.assertIsInstance(ticket["modified_ns"], str)
@@ -51,7 +57,7 @@ class KanbanApiTests(unittest.TestCase):
         self.assertIn("## Inbox", board_path.read_text(encoding="utf-8"))
 
         moved = self.client.patch(
-            "/api/tickets/TEST-1",
+            f"/api/tickets/{ticket['id']}",
             json={"status": "ready", "modified_ns": ticket["modified_ns"]},
         )
         self.assertEqual(moved.status_code, 200)
@@ -67,43 +73,86 @@ class KanbanApiTests(unittest.TestCase):
         self.assertIn("category: Testing", source)
         self.assertIn("source: [web-ui]", source)
 
+    def test_ticket_ids_are_assigned_in_sequence(self):
+        self.open_and_initialize()
+
+        first = self.create("First").get_json()["id"]
+        second = self.create("Second").get_json()["id"]
+        third = self.create("Third").get_json()["id"]
+
+        prefix = first.rpartition("-")[0]
+        self.assertEqual(
+            [first, second, third],
+            [f"{prefix}-001", f"{prefix}-002", f"{prefix}-003"],
+        )
+        self.assertIn("id_sequence: 3", self.board_yaml())
+
+    def test_client_supplied_id_is_refused(self):
+        self.open_and_initialize()
+
+        response = self.create("Pick my own id", id="CHOSEN-1")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("assigned by the project", response.get_json()["error"])
+        self.assertEqual(
+            list((self.project / ".kanban" / "tickets").glob("*.md")), []
+        )
+
+    def test_next_id_endpoint_previews_without_writing(self):
+        self.open_and_initialize()
+        created = self.create("First").get_json()["id"]
+
+        preview = self.client.get("/api/next-id")
+
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.get_json()["id"], f"{created.rpartition('-')[0]}-002")
+        self.assertEqual(
+            len(list((self.project / ".kanban" / "tickets").glob("*.md"))), 1
+        )
+
+    def test_deleted_ticket_number_is_never_reissued(self):
+        self.open_and_initialize()
+        first = self.create("Doomed").get_json()["id"]
+        next((self.project / ".kanban" / "tickets").glob("*.md")).unlink()
+
+        reissued = self.create("Replacement").get_json()["id"]
+
+        self.assertNotEqual(reissued, first)
+        self.assertTrue(reissued.endswith("-002"), reissued)
+
     def test_board_validation_failure_rolls_back_created_ticket(self):
-        self.post_json("/api/open", {"path": str(self.project)})
-        self.post_json("/api/initialize")
+        self.open_and_initialize()
+        self.create("Existing work")
+        before = self.board_yaml()
+
+        # An unterminated quoted string inside an inline list parses as a
+        # ticket but fails board validation, exercising the rollback path.
+        response = self.create('[a, "b]')
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("the ticket was not created", response.get_json()["error"])
+        self.assertEqual(
+            len(list((self.project / ".kanban" / "tickets").glob("*.md"))), 1
+        )
+        self.assertEqual(self.board_yaml(), before)
+
+    def test_no_id_is_assigned_when_the_board_is_already_invalid(self):
+        self.open_and_initialize()
         invalid = self.project / ".kanban" / "tickets" / "BROKEN.md"
         invalid.write_text("---\nid: BROKEN\n---\n", encoding="utf-8")
 
-        response = self.post_json(
-            "/api/tickets",
-            {
-                "id": "TEST-ROLLBACK",
-                "title": "Must not survive failed validation",
-                "category": "Testing",
-                "intervention": "low",
-            },
-        )
+        response = self.create("Must not survive failed validation")
 
         self.assertEqual(response.status_code, 422)
-        self.assertIn("Board validation failed", response.get_json()["error"])
-        self.assertFalse(
-            any(
-                path.name.startswith("TEST-ROLLBACK-")
-                for path in (self.project / ".kanban" / "tickets").glob("*.md")
-            )
+        self.assertIn("no ticket ID was assigned", response.get_json()["error"])
+        self.assertEqual(
+            [path.name for path in (self.project / ".kanban" / "tickets").glob("*.md")],
+            ["BROKEN.md"],
         )
 
     def test_rejects_stale_ticket_update(self):
-        self.post_json("/api/open", {"path": str(self.project)})
-        self.post_json("/api/initialize")
-        created = self.post_json(
-            "/api/tickets",
-            {
-                "id": "TEST-2",
-                "title": "Protect external changes",
-                "category": "Storage",
-                "intervention": "medium",
-            },
-        ).get_json()
+        self.open_and_initialize()
+        created = self.create("Protect external changes").get_json()
 
         ticket_path = next((self.project / ".kanban" / "tickets").glob("*.md"))
         ticket_path.write_text(
@@ -112,7 +161,7 @@ class KanbanApiTests(unittest.TestCase):
         )
 
         response = self.client.patch(
-            "/api/tickets/TEST-2",
+            f"/api/tickets/{created['id']}",
             json={"status": "done", "modified_ns": created["modified_ns"]},
         )
         self.assertEqual(response.status_code, 409)
@@ -138,6 +187,12 @@ class KanbanApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'id="theme-toggle"', response.data)
         self.assertIn(b"prefers-color-scheme: dark", response.data)
+
+    def test_create_dialog_shows_the_assigned_id_instead_of_an_input(self):
+        response = self.client.get("/")
+
+        self.assertIn(b'<strong id="create-id">', response.data)
+        self.assertNotIn(b'<input id="create-id"', response.data)
 
 
 if __name__ == "__main__":

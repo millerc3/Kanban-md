@@ -8,6 +8,21 @@ Source: .kanban/tickets/*.md
 
 > Generated summary. Markdown ticket files are authoritative.
 
+## Inbox
+
+### Storage
+
+| ID | Ticket | Intervention | Blocked by |
+|---|---|---|---|
+| KMD-005 | Add a ticket query CLI for agents | low | — |
+| KMD-006 | Sync portable tools into a target project | low | — |
+
+### Interface
+
+| ID | Ticket | Intervention | Blocked by |
+|---|---|---|---|
+| KMD-007 | Open a project from a startup path argument | low | — |
+
 ## Done
 
 | ID | Ticket | Category | Intervention | Blocked by |

@@ -52,10 +52,15 @@ The only runtime dependency is the pinned Flask version in
 - `static/app.js` — client state, rendering, API calls, drag-and-drop, and
   ticket drawer behavior.
 - `static/styles.css` — all UI styling.
-- `tools/regenerate_board.py` — canonical board generator and validator.
+- `tools/regenerate_board.py` — canonical board generator, validator, and ticket
+  ID allocator.
+- `tools/migrate_ticket_ids.py` — one-off migration that adopts project-assigned
+  ticket IDs in an existing project.
 - `tests/test_app.py` — Flask API and UI-contract tests.
 - `tests/test_regenerate_board.py` — generator, validation, CLI, and atomic-write
   tests.
+- `tests/test_migrate_ticket_ids.py` — migration planning, rewriting, and
+  rollback tests.
 - `docs/SCHEMA.md` — `.kanban` file-format documentation.
 - `exports/` — generated portable project exports used as real-world examples.
 - `imports/` — copied source material used by import tools. Instructions inside
@@ -77,8 +82,8 @@ layout is:
     └── <year>/
 ```
 
-- `board.yaml` defines the project name, valid status order, category order, and
-  intervention levels.
+- `board.yaml` defines the project name, valid status order, category order,
+  intervention levels, and the ticket ID scheme.
 - `tickets/*.md` contains active tickets.
 - `archive/**/*.md` contains retained historical tickets.
 - Ticket `id` frontmatter is immutable identity; the filename is descriptive
@@ -100,6 +105,30 @@ The generator requires these frontmatter fields:
 
 `blocked_by`, `tags`, and `source` are lists. Both inline and block-list syntax
 are supported.
+
+## Ticket IDs are assigned by the project
+
+IDs are not chosen per ticket. `board.yaml` declares `id_prefix`, `id_padding`,
+and `id_sequence`, and the next ID is one past the larger of the recorded
+high-water mark and the highest number across active and archived tickets. A
+deleted ticket therefore never releases its number.
+
+Before hand-writing a ticket file, get its ID from the canonical tool:
+
+```sh
+python3 .kanban/tools/regenerate_board.py --next-id
+```
+
+Do not invent an ID, reuse one, or add a second allocator. The API rejects a
+client-supplied ID, and allocation must stay reserve-by-create — the ID is only
+ever handed out together with the file that claims it — so a concurrent agent
+cannot be given the same number.
+
+IDs that predate the scheme remain valid; `--strict-ids` reports them for
+projects that want the format enforced. `tools/migrate_ticket_ids.py` adopts the
+scheme in an existing project, in config-only (`--adopt`) or renumbering
+(`--renumber`, `--renumber-all`) form. It is a dry run unless `--apply` is
+given, and it backs `.kanban` up before writing.
 
 ## `board.md` is generated
 

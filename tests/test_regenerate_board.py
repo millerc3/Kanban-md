@@ -194,6 +194,90 @@ unknown_future_field: preserved-by-ticket-owner
         self.assertIn("invalid status 'invented'", message)
         self.assertIn("invalid intervention 'automatic'", message)
 
+    def set_id_scheme(self, *lines):
+        path = self.kanban / "board.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8") + "".join(f"{line}\n" for line in lines),
+            encoding="utf-8",
+        )
+
+    def test_next_id_uses_the_highest_number_in_use(self):
+        self.set_id_scheme("id_prefix: TB", "id_padding: 3")
+        self.write_ticket("TB-001")
+        self.write_ticket("TB-009", archive=True)
+        self.write_ticket("legacy-thing")
+
+        self.assertEqual(board_generator.allocate_ticket_id(self.kanban), "TB-010")
+
+    def test_next_id_respects_the_recorded_high_water_mark(self):
+        self.set_id_scheme("id_prefix: TB", "id_sequence: 42")
+        self.write_ticket("TB-002")
+
+        self.assertEqual(board_generator.allocate_ticket_id(self.kanban), "TB-043")
+
+    def test_next_id_widens_past_the_configured_padding(self):
+        self.set_id_scheme("id_prefix: TB", "id_padding: 2", "id_sequence: 99")
+
+        self.assertEqual(board_generator.allocate_ticket_id(self.kanban), "TB-100")
+
+    def test_next_id_requires_an_adopted_scheme(self):
+        self.write_ticket("A1")
+
+        with self.assertRaises(board_generator.ValidationError) as raised:
+            board_generator.allocate_ticket_id(self.kanban)
+        self.assertIn("id_prefix", raised.exception.messages[0])
+
+    def test_mixed_padding_keeps_natural_order(self):
+        self.set_id_scheme("id_prefix: TB")
+        self.write_ticket("TB-009")
+        self.write_ticket("TB-010")
+        self.write_ticket("TB-0002")
+
+        board = board_generator.generate_board(self.kanban)
+        self.assertLess(board.index("TB-0002"), board.index("TB-009"))
+        self.assertLess(board.index("TB-009"), board.index("TB-010"))
+
+    def test_invalid_id_prefix_is_rejected(self):
+        self.set_id_scheme("id_prefix: 9bad")
+
+        with self.assertRaises(board_generator.ValidationError) as raised:
+            board_generator.load_board_config(self.kanban)
+        self.assertIn("id_prefix", raised.exception.messages[0])
+
+    def test_non_numeric_id_sequence_is_rejected(self):
+        self.set_id_scheme("id_sequence: soon")
+
+        with self.assertRaises(board_generator.ValidationError) as raised:
+            board_generator.load_board_config(self.kanban)
+        self.assertIn("whole number", raised.exception.messages[0])
+
+    def test_strict_ids_reports_only_nonconforming_tickets(self):
+        self.set_id_scheme("id_prefix: TB")
+        self.write_ticket("TB-001")
+        self.write_ticket("OLD-7")
+
+        problems = board_generator.nonconforming_ids(self.kanban)
+
+        self.assertEqual(len(problems), 1)
+        self.assertIn("OLD-7", problems[0])
+
+    def test_cli_next_id_and_strict_ids(self):
+        self.set_id_scheme("id_prefix: TB")
+        self.write_ticket("TB-004")
+        self.write_ticket("OLD-7")
+
+        printed = self.run_cli("--next-id")
+        self.assertEqual(printed.returncode, 0)
+        self.assertEqual(printed.stdout.strip(), "TB-005")
+        self.assertFalse((self.kanban / "board.md").exists())
+
+        strict = self.run_cli("--strict-ids")
+        self.assertEqual(strict.returncode, 2)
+        self.assertIn("OLD-7", strict.stderr)
+
+        lenient = self.run_cli()
+        self.assertEqual(lenient.returncode, 0)
+
     def test_check_success_and_stale_board_failure(self):
         self.write_ticket("A1")
         board_generator.regenerate_board(self.kanban)

@@ -28,6 +28,8 @@ REQUIRED_FIELDS = (
     "source",
 )
 PLANNING_STATUSES = {"inbox", "ready", "blocked"}
+ID_PREFIX_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+DEFAULT_ID_PADDING = 3
 GENERATED_WARNING = """<!--
 GENERATED FILE — DO NOT EDIT MANUALLY.
 Run: python3 .kanban/tools/regenerate_board.py
@@ -64,6 +66,9 @@ class BoardConfig:
     statuses: tuple[str, ...]
     categories: tuple[str, ...]
     intervention_levels: tuple[str, ...]
+    id_prefix: str = ""
+    id_padding: int = DEFAULT_ID_PADDING
+    id_sequence: int = 0
 
 
 def _split_inline_list(value: str) -> list[str]:
@@ -192,6 +197,29 @@ def _list_field(
     return tuple(item.strip() for item in value)
 
 
+def _integer_field(
+    values: dict[str, Any],
+    field: str,
+    default: int,
+    minimum: int,
+    path: Path,
+    errors: list[str],
+) -> int:
+    """Read an optional non-negative integer, keeping the default when absent."""
+
+    value = values.get(field)
+    if value is None:
+        return default
+    if not isinstance(value, str) or not value.strip().isdigit():
+        errors.append(f"{path}: field '{field}' must be a whole number")
+        return default
+    number = int(value.strip())
+    if number < minimum:
+        errors.append(f"{path}: field '{field}' must be {minimum} or greater")
+        return default
+    return number
+
+
 def _ticket_from_path(path: Path, archived: bool) -> Ticket:
     values = _frontmatter(path)
     errors = [
@@ -248,9 +276,27 @@ def load_board_config(kanban: Path) -> BoardConfig:
         errors.append(f"{path}: 'statuses' contains duplicate values")
     if len(set(interventions)) != len(interventions):
         errors.append(f"{path}: 'intervention_levels' contains duplicate values")
+
+    prefix_value = values.get("id_prefix")
+    id_prefix = ""
+    if prefix_value is not None:
+        if isinstance(prefix_value, str) and ID_PREFIX_PATTERN.match(prefix_value.strip()):
+            id_prefix = prefix_value.strip()
+        else:
+            errors.append(
+                f"{path}: 'id_prefix' must start with a letter and contain only "
+                "letters, digits, or underscores"
+            )
+    id_padding = _integer_field(
+        values, "id_padding", DEFAULT_ID_PADDING, 1, path, errors
+    )
+    id_sequence = _integer_field(values, "id_sequence", 0, 0, path, errors)
+
     if errors:
         raise ValidationError(errors)
-    return BoardConfig(name, statuses, categories, interventions)
+    return BoardConfig(
+        name, statuses, categories, interventions, id_prefix, id_padding, id_sequence
+    )
 
 
 def load_and_validate(kanban: Path) -> tuple[BoardConfig, list[Ticket], list[Ticket]]:
@@ -317,6 +363,67 @@ def load_and_validate(kanban: Path) -> tuple[BoardConfig, list[Ticket], list[Tic
         [ticket for ticket in tickets if not ticket.archived],
         [ticket for ticket in tickets if ticket.archived],
     )
+
+
+def ticket_number(ticket_id: str, prefix: str) -> int | None:
+    """Return the sequence number of an id in the project scheme, else None."""
+
+    if not prefix:
+        return None
+    match = re.fullmatch(rf"{re.escape(prefix)}-(\d+)", ticket_id)
+    return int(match.group(1)) if match else None
+
+
+def format_ticket_id(prefix: str, number: int, padding: int) -> str:
+    return f"{prefix}-{number:0{padding}d}"
+
+
+def highest_ticket_number(tickets: Sequence[Ticket], prefix: str) -> int:
+    numbers = [
+        number
+        for number in (ticket_number(ticket.id, prefix) for ticket in tickets)
+        if number is not None
+    ]
+    return max(numbers, default=0)
+
+
+def next_ticket_id(config: BoardConfig, tickets: Sequence[Ticket]) -> str:
+    """Return the next project-wide id, never reusing a retired number.
+
+    The high-water mark recorded in board.yaml wins over a scan of the ticket
+    files so that deleting a ticket does not hand its number to a new one.
+    """
+
+    if not config.id_prefix:
+        raise ValidationError(
+            [
+                "board.yaml does not define 'id_prefix'; run "
+                "python3 .kanban/tools/migrate_ticket_ids.py --adopt --apply"
+            ]
+        )
+    highest = max(highest_ticket_number(tickets, config.id_prefix), config.id_sequence)
+    return format_ticket_id(config.id_prefix, highest + 1, config.id_padding)
+
+
+def allocate_ticket_id(kanban: Path) -> str:
+    """Validate the board and return the id a new ticket should claim."""
+
+    config, active, archived = load_and_validate(kanban)
+    return next_ticket_id(config, [*active, *archived])
+
+
+def nonconforming_ids(kanban: Path) -> list[str]:
+    """Report ticket ids that predate or ignore the project id scheme."""
+
+    config, active, archived = load_and_validate(kanban)
+    if not config.id_prefix:
+        return [f"{kanban / 'board.yaml'}: 'id_prefix' is not set for this project"]
+    return [
+        f"{ticket.path}: id '{ticket.id}' does not match the project scheme "
+        f"'{config.id_prefix}-<number>'"
+        for ticket in (*active, *archived)
+        if ticket_number(ticket.id, config.id_prefix) is None
+    ]
 
 
 def natural_key(value: str) -> tuple[tuple[int, object], ...]:
@@ -483,6 +590,11 @@ def _argument_parser() -> argparse.ArgumentParser:
         type=Path,
         help="explicit path to the .kanban directory",
     )
+    parser.add_argument(
+        "--strict-ids",
+        action="store_true",
+        help="also fail when a ticket id does not match the project id scheme",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--check",
@@ -493,6 +605,11 @@ def _argument_parser() -> argparse.ArgumentParser:
         "--stdout",
         action="store_true",
         help="print generated Markdown without writing board.md",
+    )
+    mode.add_argument(
+        "--next-id",
+        action="store_true",
+        help="print the next available ticket id without writing anything",
     )
     return parser
 
@@ -509,6 +626,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             if arguments.kanban is not None
             else discover_kanban()
         )
+        if arguments.next_id:
+            sys.stdout.write(f"{allocate_ticket_id(kanban)}\n")
+            return 0
+        if arguments.strict_ids:
+            problems = nonconforming_ids(kanban)
+            if problems:
+                raise ValidationError(problems)
         content = generate_board(kanban)
         if arguments.stdout:
             sys.stdout.write(content)

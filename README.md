@@ -33,6 +33,34 @@ locally and is never uploaded.
 
 See [docs/SCHEMA.md](docs/SCHEMA.md) for the portable file format.
 
+## Ticket IDs
+
+Ticket IDs are assigned by the project, not typed in by hand. `board.yaml`
+declares a prefix and a high-water mark, and each new ticket takes the next
+number. Deleting a ticket never releases its number for reuse.
+
+Agents creating ticket files directly can read the next ID with:
+
+```sh
+python3 .kanban/tools/regenerate_board.py --next-id
+```
+
+### Converting an existing project
+
+A project that used its own numbering can adopt the scheme without rewriting
+anything. This records the prefix and starts numbering above every ID already
+in use, leaving existing tickets exactly as they are:
+
+```sh
+python3 .kanban/tools/migrate_ticket_ids.py --adopt --prefix PROJ --apply
+```
+
+To also renumber the IDs that do not match the scheme — remapping `blocked_by`
+references and renaming files — use `--renumber`, or `--renumber-all` for a
+clean sequence across every ticket. Run any of these without `--apply` first to
+preview the plan; nothing is written until you pass it, and a timestamped
+backup of `.kanban` is kept when you do.
+
 ## Generated board summary
 
 `.kanban/board.md` is generated and disposable. It must never be manually

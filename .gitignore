@@ -6,3 +6,6 @@ __pycache__/
 *.log
 .pytest_cache/
 .DS_Store
+
+# Backups written by tools/migrate_ticket_ids.py --apply
+.kanban.backup-*/
