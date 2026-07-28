@@ -11,6 +11,16 @@ file that remains easy for both people and agents to read.
 
 Then open <http://127.0.0.1:5000> in Firefox or any other browser.
 
+To open a project immediately, pass its directory to either launcher:
+
+```powershell
+.\run.ps1 D:\Development\my-project
+.\.venv\Scripts\python.exe app.py D:\Development\my-project
+```
+
+If kanban.md is already running, `run.ps1 <path>` re-points that server (and
+any browser tabs using it) to the supplied project.
+
 The first run creates a local Python environment and installs Flask. Later runs
 start immediately.
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import argparse
 import os
 import re
+import sys
 import tempfile
 import threading
 from datetime import date
@@ -29,6 +31,30 @@ STATUSES = ("inbox", "ready", "in_progress", "blocked", "review", "done")
 INTERVENTION_LEVELS = ("low", "medium", "high")
 FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)\Z", re.DOTALL)
 ID_ALLOCATION_ATTEMPTS = 5
+
+
+def configure_startup_project(arguments: list[str] | None = None) -> None:
+    """Select the optional project directory supplied on the command line."""
+    global ACTIVE_PROJECT
+    parser = argparse.ArgumentParser(
+        description="Run kanban.md, optionally opening a project directory."
+    )
+    parser.add_argument("project", nargs="?", help="project directory to open")
+    options = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
+    if options.project is None:
+        return
+
+    try:
+        project = Path(options.project).expanduser().resolve()
+    except (OSError, RuntimeError) as error:
+        parser.error(f"cannot resolve project path: {error}")
+    if not project.exists():
+        parser.error(f"project path does not exist: {project}")
+    if not project.is_dir():
+        parser.error(f"project path is not a directory: {project}")
+
+    with PROJECT_LOCK:
+        ACTIVE_PROJECT = project
 
 
 def strip_quotes(value: str) -> str:
@@ -529,4 +555,5 @@ def update_ticket(ticket_id: str):
 
 
 if __name__ == "__main__":
+    configure_startup_project()
     app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)

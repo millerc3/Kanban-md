@@ -15,6 +15,7 @@ const involvement = {
 
 const state = {
   tickets: [],
+  project: "",
   selectedId: null,
   search: "",
   intervention: "all",
@@ -42,7 +43,11 @@ async function api(path, options = {}) {
     ...options,
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Something went wrong");
+  if (!response.ok) {
+    const error = new Error(data.error || "Something went wrong");
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -54,6 +59,7 @@ function setNotice(message, isError = false) {
 
 function applyProject(data, announce = true) {
   state.tickets = data.tickets || [];
+  state.project = data.project;
   state.initialized = data.initialized;
   byId("project-name").textContent = data.name;
   byId("project-path").value = data.project;
@@ -260,11 +266,19 @@ async function moveTicket(ticketId, status) {
 }
 
 async function refreshTickets() {
-  if (!state.initialized || document.hidden) return;
+  if (document.hidden) return;
   try {
     const data = await api("/api/tickets");
-    const before = JSON.stringify(state.tickets.map((ticket) => [ticket.id, ticket.modified_ns]));
-    const after = JSON.stringify(data.tickets.map((ticket) => [ticket.id, ticket.modified_ns]));
+    const before = JSON.stringify([
+      state.project,
+      state.initialized,
+      state.tickets.map((ticket) => [ticket.id, ticket.modified_ns]),
+    ]);
+    const after = JSON.stringify([
+      data.project,
+      data.initialized,
+      data.tickets.map((ticket) => [ticket.id, ticket.modified_ns]),
+    ]);
     if (before !== after) applyProject(data, false);
   } catch {
     // The next explicit action will surface a useful error.
@@ -273,7 +287,15 @@ async function refreshTickets() {
 
 function startRefreshing() {
   if (state.refreshTimer) clearInterval(state.refreshTimer);
-  if (state.initialized) state.refreshTimer = setInterval(refreshTickets, 2000);
+  state.refreshTimer = setInterval(refreshTickets, 2000);
+}
+
+async function loadStartupProject() {
+  try {
+    applyProject(await api("/api/tickets"));
+  } catch (error) {
+    if (error.status !== 409) setNotice(error.message, true);
+  }
 }
 
 byId("open-project").addEventListener("click", () => byId("project-picker").scrollIntoView({ behavior: "smooth" }));
@@ -391,3 +413,6 @@ byId("ticket-scrim").addEventListener("click", (event) => {
 byId("create-scrim").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) event.currentTarget.classList.add("hidden");
 });
+
+loadStartupProject();
+startRefreshing();

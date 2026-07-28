@@ -1,5 +1,7 @@
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 
 import app as kanban_app
@@ -193,6 +195,75 @@ class KanbanApiTests(unittest.TestCase):
 
         self.assertIn(b'<strong id="create-id">', response.data)
         self.assertNotIn(b'<input id="create-id"', response.data)
+
+    def test_startup_path_selects_an_initialized_project(self):
+        (self.project / ".kanban" / "tickets").mkdir(parents=True)
+
+        kanban_app.configure_startup_project([str(self.project)])
+
+        self.assertEqual(kanban_app.ACTIVE_PROJECT, self.project.resolve())
+        response = self.client.get("/api/tickets")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["initialized"])
+
+    def test_startup_path_selects_an_uninitialized_project(self):
+        kanban_app.configure_startup_project([str(self.project)])
+
+        self.assertEqual(kanban_app.ACTIVE_PROJECT, self.project.resolve())
+        response = self.client.get("/api/tickets")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.get_json()["initialized"])
+
+    def test_nonexistent_startup_path_exits_nonzero(self):
+        missing = self.project / "missing"
+
+        with redirect_stderr(StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as raised:
+                kanban_app.configure_startup_project([str(missing)])
+
+        self.assertNotEqual(raised.exception.code, 0)
+        self.assertIn("project path does not exist", stderr.getvalue())
+        self.assertIsNone(kanban_app.ACTIVE_PROJECT)
+
+    def test_file_startup_path_exits_nonzero(self):
+        file_path = self.project / "not-a-directory.txt"
+        file_path.write_text("not a project", encoding="utf-8")
+
+        with redirect_stderr(StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as raised:
+                kanban_app.configure_startup_project([str(file_path)])
+
+        self.assertNotEqual(raised.exception.code, 0)
+        self.assertIn("project path is not a directory", stderr.getvalue())
+        self.assertIsNone(kanban_app.ACTIVE_PROJECT)
+
+    def test_no_startup_path_leaves_project_selection_unchanged(self):
+        kanban_app.ACTIVE_PROJECT = self.project.resolve()
+
+        kanban_app.configure_startup_project([])
+
+        self.assertEqual(kanban_app.ACTIVE_PROJECT, self.project.resolve())
+
+    def test_frontend_loads_the_startup_project(self):
+        script = (Path(__file__).parents[1] / "static" / "app.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('applyProject(await api("/api/tickets"))', script)
+        self.assertIn("loadStartupProject();", script)
+        self.assertIn("data.project,", script)
+        self.assertIn("state.refreshTimer = setInterval(refreshTickets, 2000)", script)
+
+    def test_windows_launcher_forwards_and_repoints_startup_path(self):
+        launcher = (Path(__file__).parents[1] / "run.ps1").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("Project path does not exist:", launcher)
+        self.assertIn("Project path is not a directory:", launcher)
+        self.assertIn("(Resolve-Path -LiteralPath $ProjectPath).Path", launcher)
+        self.assertIn("$StartupArguments += $ProjectPath", launcher)
+        self.assertIn('Invoke-RestMethod -Uri "$AppUrl/api/open"', launcher)
 
 
 if __name__ == "__main__":
