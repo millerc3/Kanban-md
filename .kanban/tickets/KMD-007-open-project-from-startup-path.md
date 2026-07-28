@@ -1,7 +1,7 @@
 ---
 id: KMD-007
 title: Open a project from a startup path argument
-status: inbox
+status: done
 category: Interface
 intervention: low
 priority: medium
@@ -32,17 +32,17 @@ a typo, it is unambiguous, and it should fail loudly.
 
 ## Acceptance criteria
 
-- [ ] `python app.py <path>` sets the active project before the server starts.
-- [ ] `run.ps1 <path>` forwards the argument.
-- [ ] A path that does not exist, or is not a directory, prints a clear message and exits nonzero
+- [x] `python app.py <path>` sets the active project before the server starts.
+- [x] `run.ps1 <path>` forwards the argument.
+- [x] A path that does not exist, or is not a directory, prints a clear message and exits nonzero
       without starting the server.
-- [ ] A directory that exists but has no `.kanban` starts normally with that project selected, so
+- [x] A directory that exists but has no `.kanban` starts normally with that project selected, so
       the existing initialize button is one click away.
-- [ ] With no argument, startup behaviour is unchanged.
-- [ ] The browser shows the board on first load instead of "No project open".
-- [ ] `run.ps1` re-points an already-running server at the supplied path rather than exiting early.
-- [ ] The server still binds only to `127.0.0.1`.
-- [ ] Tests cover: a valid initialized path, a valid uninitialized path, a nonexistent path, a
+- [x] With no argument, startup behaviour is unchanged.
+- [x] The browser shows the board on first load instead of "No project open".
+- [x] `run.ps1` re-points an already-running server at the supplied path rather than exiting early.
+- [x] The server still binds only to `127.0.0.1`.
+- [x] Tests cover: a valid initialized path, a valid uninitialized path, a nonexistent path, a
       path that is a file, and no argument at all.
 
 ## Implementation notes
