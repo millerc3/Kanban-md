@@ -71,6 +71,31 @@ clean sequence across every ticket. Run any of these without `--apply` first to
 preview the plan; nothing is written until you pass it, and a timestamped
 backup of `.kanban` is kept when you do.
 
+## Syncing portable tools
+
+From a kanban.md checkout, refresh the portable tools carried by another
+initialized project:
+
+```sh
+python3 tools/sync_tools.py /path/to/project
+```
+
+The argument is the project root, not its `.kanban` directory. The command
+copies only the explicit portable-tool manifest and leaves matching files
+untouched. It refuses to create a missing `.kanban`; initialize the project in
+the app first.
+
+To detect missing or stale copies without changing the target:
+
+```sh
+python3 tools/sync_tools.py --check /path/to/project
+```
+
+The app performs the same compare-and-repair operation automatically whenever
+an existing project is opened, including through `run.ps1 <path>`. Newly
+initialized projects receive the portable tools immediately. Opening a folder
+without `.kanban` still works and leaves it untouched until initialization.
+
 ## Generated board summary
 
 `.kanban/board.md` is generated and disposable. It must never be manually

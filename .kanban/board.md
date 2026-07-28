@@ -15,7 +15,6 @@ Source: .kanban/tickets/*.md
 | ID | Ticket | Intervention | Blocked by |
 |---|---|---|---|
 | KMD-005 | Add a ticket query CLI for agents | low | — |
-| KMD-006 | Sync portable tools into a target project | low | — |
 
 ## Done
 
@@ -25,6 +24,7 @@ Source: .kanban/tickets/*.md
 | KMD-002 | Read and write a local `.kanban` directory | Storage | low | KMD-001 |
 | KMD-003 | Generate the agent board summary | Storage | low | KMD-002 |
 | KMD-004 | Add drag-and-drop movement | Interface | low | KMD-002 |
+| KMD-006 | Sync portable tools into a target project | Storage | low | — |
 | KMD-007 | Open a project from a startup path argument | Interface | low | — |
 
 ## Archive

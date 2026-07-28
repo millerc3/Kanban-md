@@ -29,6 +29,33 @@ database.
 - `tickets/` contains every active ticket in one flat directory.
 - `archive/` contains completed tickets retained by the developer.
 
+## Refreshing portable tools
+
+The files under `.kanban/tools/` are disposable copies maintained from a
+kanban.md source checkout. Refresh them by passing the project root:
+
+```sh
+python3 tools/sync_tools.py /path/to/project
+```
+
+This copies the explicit portable-tool manifest, creates `.kanban/tools/` when
+needed, and does not rewrite byte-identical files. It does not create a board:
+the target must already contain `.kanban`.
+
+Check for missing or stale copies without writing anything:
+
+```sh
+python3 tools/sync_tools.py --check /path/to/project
+```
+
+The check requires a kanban.md checkout because the canonical source files are
+not available inside a portable project.
+
+When a project is opened by the app, the running kanban.md checkout
+automatically compares and repairs these portable copies. Initialization also
+populates them. A selected directory without `.kanban` is left untouched so it
+can use the app's normal initialization flow.
+
 ## Regenerating and validating the board
 
 After creating, editing, moving, or archiving any ticket, agents must run this

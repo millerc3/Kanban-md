@@ -1,11 +1,13 @@
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest import mock
 
 import app as kanban_app
 from tools.regenerate_board import generate_board
+from tools.sync_tools import PORTABLE_TOOLS, SyncError
 
 
 class KanbanApiTests(unittest.TestCase):
@@ -34,6 +36,15 @@ class KanbanApiTests(unittest.TestCase):
     def board_yaml(self):
         return (self.project / ".kanban" / "board.yaml").read_text(encoding="utf-8")
 
+    def assert_portable_tools_match(self):
+        canonical = Path(kanban_app.__file__).parent / "tools"
+        portable = self.project / ".kanban" / "tools"
+        for name in PORTABLE_TOOLS:
+            self.assertEqual(
+                (portable / name).read_bytes(),
+                (canonical / name).read_bytes(),
+            )
+
     def test_project_lifecycle(self):
         opened = self.post_json("/api/open", {"path": str(self.project)})
         self.assertEqual(opened.status_code, 200)
@@ -44,6 +55,11 @@ class KanbanApiTests(unittest.TestCase):
         self.assertTrue(initialized.get_json()["initialized"])
         self.assertTrue((self.project / ".kanban" / "board.yaml").is_file())
         self.assertIn("id_prefix: ", self.board_yaml())
+        self.assert_portable_tools_match()
+        self.assertEqual(
+            {item["status"] for item in initialized.get_json()["tool_sync"]},
+            {"added"},
+        )
 
         created = self.create("Verify the Flask board")
         self.assertEqual(created.status_code, 201)
@@ -199,17 +215,23 @@ class KanbanApiTests(unittest.TestCase):
     def test_startup_path_selects_an_initialized_project(self):
         (self.project / ".kanban" / "tickets").mkdir(parents=True)
 
-        kanban_app.configure_startup_project([str(self.project)])
+        with redirect_stdout(StringIO()) as stdout:
+            kanban_app.configure_startup_project([str(self.project)])
 
         self.assertEqual(kanban_app.ACTIVE_PROJECT, self.project.resolve())
+        self.assert_portable_tools_match()
+        self.assertEqual(stdout.getvalue().count(": added"), len(PORTABLE_TOOLS))
         response = self.client.get("/api/tickets")
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["initialized"])
 
     def test_startup_path_selects_an_uninitialized_project(self):
-        kanban_app.configure_startup_project([str(self.project)])
+        with redirect_stdout(StringIO()) as stdout:
+            kanban_app.configure_startup_project([str(self.project)])
 
         self.assertEqual(kanban_app.ACTIVE_PROJECT, self.project.resolve())
+        self.assertFalse((self.project / ".kanban").exists())
+        self.assertIn("portable tool sync skipped", stdout.getvalue())
         response = self.client.get("/api/tickets")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.get_json()["initialized"])
@@ -244,6 +266,54 @@ class KanbanApiTests(unittest.TestCase):
 
         self.assertEqual(kanban_app.ACTIVE_PROJECT, self.project.resolve())
 
+    def test_open_project_refreshes_stale_portable_tools(self):
+        tools = self.project / ".kanban" / "tools"
+        tools.mkdir(parents=True)
+        stale = tools / PORTABLE_TOOLS[0]
+        stale.write_bytes(b"stale")
+
+        response = self.post_json("/api/open", {"path": str(self.project)})
+
+        self.assertEqual(response.status_code, 200)
+        self.assert_portable_tools_match()
+        statuses = {
+            item["name"]: item["status"] for item in response.get_json()["tool_sync"]
+        }
+        self.assertEqual(statuses[PORTABLE_TOOLS[0]], "updated")
+        self.assertEqual(statuses[PORTABLE_TOOLS[1]], "added")
+
+    def test_sync_failure_does_not_switch_the_active_project(self):
+        previous = self.project / "previous"
+        previous.mkdir()
+        (self.project / ".kanban").mkdir()
+        kanban_app.ACTIVE_PROJECT = previous
+
+        with mock.patch.object(
+            kanban_app,
+            "sync_portable_tools",
+            side_effect=SyncError("simulated failure"),
+        ):
+            response = self.post_json("/api/open", {"path": str(self.project)})
+
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("Could not synchronize", response.get_json()["error"])
+        self.assertEqual(kanban_app.ACTIVE_PROJECT, previous)
+
+    def test_initialize_rolls_back_when_tool_sync_fails(self):
+        opened = self.post_json("/api/open", {"path": str(self.project)})
+        self.assertEqual(opened.status_code, 200)
+
+        with mock.patch.object(
+            kanban_app,
+            "sync_portable_tools",
+            side_effect=SyncError("simulated failure"),
+        ):
+            response = self.post_json("/api/initialize")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("initialization was rolled back", response.get_json()["error"])
+        self.assertFalse((self.project / ".kanban").exists())
+
     def test_frontend_loads_the_startup_project(self):
         script = (Path(__file__).parents[1] / "static" / "app.js").read_text(
             encoding="utf-8"
@@ -264,6 +334,8 @@ class KanbanApiTests(unittest.TestCase):
         self.assertIn("(Resolve-Path -LiteralPath $ProjectPath).Path", launcher)
         self.assertIn("$StartupArguments += $ProjectPath", launcher)
         self.assertIn('Invoke-RestMethod -Uri "$AppUrl/api/open"', launcher)
+        self.assertIn("foreach ($Tool in $OpenResult.tool_sync)", launcher)
+        self.assertIn("$Tool.status", launcher)
 
 
 if __name__ == "__main__":

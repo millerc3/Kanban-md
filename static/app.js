@@ -67,9 +67,15 @@ function applyProject(data, announce = true) {
   byId("controls").classList.toggle("hidden", !data.initialized);
   byId("board").classList.toggle("hidden", !data.initialized);
   if (announce) {
+    const toolChanges = (data.tool_sync || []).filter(
+      (tool) => tool.status !== "already current",
+    );
+    const syncNotice = toolChanges.length
+      ? ` · ${toolChanges.length} portable tool${toolChanges.length === 1 ? "" : "s"} synchronized`
+      : "";
     setNotice(
       data.initialized
-        ? `${state.tickets.length} Markdown ticket${state.tickets.length === 1 ? "" : "s"} loaded`
+        ? `${state.tickets.length} Markdown ticket${state.tickets.length === 1 ? "" : "s"} loaded${syncNotice}`
         : "This folder does not have a .kanban board yet",
     );
   }

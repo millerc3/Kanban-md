@@ -19,6 +19,7 @@ from tools.regenerate_board import (
     regenerate_board,
     ticket_number,
 )
+from tools.sync_tools import SyncError, sync_tools as sync_portable_tools
 
 
 app = Flask(__name__)
@@ -31,6 +32,24 @@ STATUSES = ("inbox", "ready", "in_progress", "blocked", "review", "done")
 INTERVENTION_LEVELS = ("low", "medium", "high")
 FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)\Z", re.DOTALL)
 ID_ALLOCATION_ATTEMPTS = 5
+
+
+def synchronize_project_tools(project: Path) -> list[tuple[Path, str]]:
+    """Repair portable tools when the selected directory has a .kanban board."""
+
+    if not (project / ".kanban").is_dir():
+        return []
+    return sync_portable_tools(project)
+
+
+def print_tool_sync(
+    project: Path, results: list[tuple[Path, str]]
+) -> None:
+    if not (project / ".kanban").is_dir():
+        print(f"{project}: portable tool sync skipped (no .kanban directory)")
+        return
+    for path, status in results:
+        print(f"{path}: {status}")
 
 
 def configure_startup_project(arguments: list[str] | None = None) -> None:
@@ -54,6 +73,11 @@ def configure_startup_project(arguments: list[str] | None = None) -> None:
         parser.error(f"project path is not a directory: {project}")
 
     with PROJECT_LOCK:
+        try:
+            tool_sync = synchronize_project_tools(project)
+        except SyncError as error:
+            parser.error(f"could not synchronize project tools: {error}")
+        print_tool_sync(project, tool_sync)
         ACTIVE_PROJECT = project
 
 
@@ -220,7 +244,9 @@ def update_frontmatter(source: str, updates: dict[str, str]) -> str:
     return f"---\n{frontmatter}\n---\n\n{match.group(2).lstrip()}"
 
 
-def project_payload(project: Path) -> dict[str, Any]:
+def project_payload(
+    project: Path, tool_sync: list[tuple[Path, str]] | None = None
+) -> dict[str, Any]:
     tickets_directory = project / ".kanban" / "tickets"
     tickets: list[dict[str, Any]] = []
     invalid_files: list[str] = []
@@ -242,6 +268,10 @@ def project_payload(project: Path) -> dict[str, Any]:
         "initialized": tickets_directory.is_dir(),
         "tickets": tickets,
         "invalid_files": invalid_files,
+        "tool_sync": [
+            {"name": path.name, "status": status}
+            for path, status in (tool_sync or [])
+        ],
     }
 
 
@@ -348,8 +378,14 @@ def open_project():
         return jsonify({"error": "That directory does not exist"}), 404
 
     with PROJECT_LOCK:
+        try:
+            tool_sync = synchronize_project_tools(project)
+        except SyncError as error:
+            return jsonify(
+                {"error": f"Could not synchronize project tools: {error}"}
+            ), 500
         ACTIVE_PROJECT = project
-        return jsonify(project_payload(project))
+        return jsonify(project_payload(project, tool_sync))
 
 
 @app.post("/api/initialize")
@@ -358,9 +394,13 @@ def initialize_project():
     kanban = project / ".kanban"
     tickets = kanban / "tickets"
     archive = kanban / "archive"
+    kanban_existed = kanban.exists()
+    tickets_existed = tickets.exists()
+    archive_existed = archive.exists()
     tickets.mkdir(parents=True, exist_ok=True)
     archive.mkdir(parents=True, exist_ok=True)
     board_config = kanban / "board.yaml"
+    board_config_existed = board_config.exists()
     if not board_config.exists():
         atomic_write(
             board_config,
@@ -378,7 +418,39 @@ def initialize_project():
                 )
             ),
         )
-    return jsonify(project_payload(project))
+    try:
+        tool_sync = synchronize_project_tools(project)
+    except SyncError as error:
+        rollback_errors = []
+        created_paths = (
+            (board_config, board_config_existed, False),
+            (archive, archive_existed, True),
+            (tickets, tickets_existed, True),
+            (kanban, kanban_existed, True),
+        )
+        for path, existed, is_directory in created_paths:
+            if existed:
+                continue
+            try:
+                path.rmdir() if is_directory else path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as rollback_error:
+                rollback_errors.append(f"{path}: {rollback_error}")
+        rollback_notice = (
+            f" Rollback also failed: {'; '.join(rollback_errors)}"
+            if rollback_errors
+            else ""
+        )
+        return jsonify(
+            {
+                "error": (
+                    f"Project initialization was rolled back because its tools "
+                    f"could not be synchronized: {error}.{rollback_notice}"
+                )
+            }
+        ), 500
+    return jsonify(project_payload(project, tool_sync))
 
 
 @app.get("/api/tickets")

@@ -1,7 +1,7 @@
 ---
 id: KMD-006
 title: Sync portable tools into a target project
-status: inbox
+status: done
 category: Storage
 intervention: low
 priority: high
@@ -38,24 +38,24 @@ scope here.
 
 ## Acceptance criteria
 
-- [ ] `tools/sync_tools.py <target_project>` copies the portable tools into
+- [x] `tools/sync_tools.py <target_project>` copies the portable tools into
       `<target_project>/.kanban/tools/`, creating the directory if needed.
-- [ ] The target path is the project root, not the `.kanban` directory, and is resolved the same
+- [x] The target path is the project root, not the `.kanban` directory, and is resolved the same
       way `POST /api/open` resolves a project path.
-- [ ] The command exits nonzero with a clear message when the target has no `.kanban` directory.
+- [x] The command exits nonzero with a clear message when the target has no `.kanban` directory.
       It must not create a board; that is the app's initialize flow.
-- [ ] `--check` reports drift and exits nonzero when any copy differs or is missing, without
+- [x] `--check` reports drift and exits nonzero when any copy differs or is missing, without
       writing anything.
-- [ ] Copying is the default action; there is no dry-run default.
-- [ ] Per-file reporting distinguishes `added`, `updated`, and `already current`, matching the
+- [x] Copying is the default action; there is no dry-run default.
+- [x] Per-file reporting distinguishes `added`, `updated`, and `already current`, matching the
       generator's existing "regenerated / already current" phrasing.
-- [ ] A file whose bytes already match is not rewritten, so modification times are left alone.
-- [ ] Writes are atomic.
-- [ ] `tests/test_sync_tools.py` covers a fresh copy, an up-to-date no-op, a stale file being
+- [x] A file whose bytes already match is not rewritten, so modification times are left alone.
+- [x] Writes are atomic.
+- [x] `tests/test_sync_tools.py` covers a fresh copy, an up-to-date no-op, a stale file being
       refreshed, a missing file being added, `--check` passing and failing, and the missing
       `.kanban` error.
-- [ ] `README.md` and `docs/SCHEMA.md` document the command.
-- [ ] `AGENTS.md` points to it as the supported way to refresh exported copies.
+- [x] `README.md` and `docs/SCHEMA.md` document the command.
+- [x] `AGENTS.md` points to it as the supported way to refresh exported copies.
 
 ## Implementation notes
 
@@ -86,3 +86,7 @@ ticket should not promise otherwise.
 
 Confirm the manifest is the right set of files to distribute, and decide whether refreshing a
 target's tools should be part of a routine you run deliberately or something wired into a hook.
+
+Confirmed on 2026-07-28: keep the explicit two-file manifest and automatically compare and repair
+portable tools when the app opens or initializes a project. Retain the deliberate CLI command for
+manual synchronization and CI-style drift checks.

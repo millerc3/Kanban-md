@@ -36,7 +36,15 @@ try {
 if ($ServerRunning) {
     if ($ProjectPath) {
         $RequestBody = @{ path = $ProjectPath } | ConvertTo-Json
-        Invoke-RestMethod -Uri "$AppUrl/api/open" -Method Post -ContentType "application/json" -Body $RequestBody | Out-Null
+        $OpenResult = Invoke-RestMethod -Uri "$AppUrl/api/open" -Method Post -ContentType "application/json" -Body $RequestBody
+        if ($OpenResult.tool_sync.Count -gt 0) {
+            foreach ($Tool in $OpenResult.tool_sync) {
+                $ToolPath = Join-Path $ProjectPath ".kanban\tools\$($Tool.name)"
+                Write-Host ("{0}: {1}" -f $ToolPath, $Tool.status)
+            }
+        } elseif (-not $OpenResult.initialized) {
+            Write-Host "$ProjectPath`: portable tool sync skipped (no .kanban directory)"
+        }
         Write-Host "kanban.md is already running at $AppUrl"
         Write-Host "Re-pointed the server and any open browser tabs to $ProjectPath"
     } else {
