@@ -48,4 +48,3 @@ python3 .kanban/tools/regenerate_board.py
 Use `python3 .kanban/tools/regenerate_board.py --check` to validate ticket data
 and confirm the summary is current. Fix validation failures in ticket files,
 never in `board.md`.
-# Kanban-md
