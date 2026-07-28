@@ -98,7 +98,7 @@ def ticket_from_file(path: Path) -> dict[str, Any] | None:
         "blocked_by": normalize_list(values.get("blocked_by")),
         "tags": normalize_list(values.get("tags")),
         "body": body,
-        "modified_ns": path.stat().st_mtime_ns,
+        "modified_ns": str(path.stat().st_mtime_ns),
     }
 
 

@@ -8,6 +8,7 @@ priority: medium
 type: feature
 blocked_by: [KMD-002]
 tags: [interaction]
+source: []
 created: 2026-07-26
 updated: 2026-07-26
 ---

@@ -8,6 +8,7 @@ priority: high
 type: decision
 blocked_by: []
 tags: [schema, local-first]
+source: []
 created: 2026-07-26
 updated: 2026-07-26
 ---

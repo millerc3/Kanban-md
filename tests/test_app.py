@@ -43,6 +43,9 @@ class KanbanApiTests(unittest.TestCase):
         ticket = created.get_json()
         self.assertEqual(ticket["status"], "inbox")
         kanban = self.project / ".kanban"
+        ticket_path = next((kanban / "tickets").glob("*.md"))
+        self.assertIsInstance(ticket["modified_ns"], str)
+        self.assertEqual(ticket["modified_ns"], str(ticket_path.stat().st_mtime_ns))
         board_path = kanban / "board.md"
         self.assertEqual(board_path.read_text(encoding="utf-8"), generate_board(kanban))
         self.assertIn("## Inbox", board_path.read_text(encoding="utf-8"))

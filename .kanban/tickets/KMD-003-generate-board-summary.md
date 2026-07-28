@@ -1,15 +1,16 @@
 ---
 id: KMD-003
 title: Generate the agent board summary
-status: ready
+status: done
 category: Storage
 intervention: low
 priority: medium
 type: feature
 blocked_by: [KMD-002]
 tags: [agents, markdown]
+source: []
 created: 2026-07-26
-updated: 2026-07-26
+updated: 2026-07-27
 ---
 
 ## Goal

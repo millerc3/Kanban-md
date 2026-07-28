@@ -142,6 +142,19 @@ unknown_future_field: preserved-by-ticket-owner
         self.assertIn("| A1 |", content)
         self.assertIn("DONE1", content)
 
+    def test_source_preserves_markdown_heading_fragment(self):
+        self.write_ticket(
+            "A1",
+            source="[docs/design.md#sacrifice-wallet]",
+        )
+
+        _, active, _ = board_generator.load_and_validate(self.kanban)
+
+        self.assertEqual(
+            active[0].source,
+            ("docs/design.md#sacrifice-wallet",),
+        )
+
     def test_archived_id_satisfies_dependency_validation(self):
         self.write_ticket("OLD1", status="done", archive=True)
         self.write_ticket("A1", blocked_by="[OLD1]")

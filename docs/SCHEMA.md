@@ -63,6 +63,7 @@ priority: high
 type: feature
 blocked_by: [PROJ-100]
 tags: [fishnet, economy]
+source: [docs/design.md#sacrifice-wallet]
 created: 2026-07-26
 updated: 2026-07-26
 ---
@@ -93,6 +94,30 @@ Every ticket has exactly one structured `intervention` level:
   hands-on.
 
 This field is separate from arbitrary tags and from priority.
+
+### Source
+
+`source` is a list of provenance references. When a reference points into a
+Markdown file, use a project-relative path followed by the target heading's
+fragment identifier:
+
+```yaml
+source: [docs/design.md#sacrifice-wallet]
+```
+
+The `#sacrifice-wallet` suffix is commonly called a heading anchor or fragment.
+Use the lowercase, hyphen-separated form of the heading text. For a reference
+that must remain stable when the heading is renamed, place an explicit anchor
+immediately before the heading in the source document:
+
+```md
+<a id="sacrifice-wallet"></a>
+
+## Sacrifice wallet
+```
+
+Then use `docs/design.md#sacrifice-wallet` in the ticket. Provenance that does
+not refer to a Markdown section, such as `web-ui`, may remain a plain label.
 
 ## Markdown body
 
