@@ -10,7 +10,7 @@ blocked_by: []
 tags: [web-ui, dependencies, validation]
 source: [docs/SCHEMA.md#status]
 created: 2026-07-28
-updated: 2026-07-28
+updated: 2026-07-29
 ---
 
 ## Goal
@@ -38,8 +38,6 @@ cross-reference every dependency by hand — and will eventually not bother.
 - [ ] The move is still allowed. This is advisory, not a lock.
 - [ ] "Unfinished" is defined once, explicitly, and used everywhere — including whether an archived
       blocker counts as satisfied.
-- [ ] A card whose blockers are all satisfied is visually distinguishable from one whose are not, so
-      the board answers "what can I start?" without opening tickets.
 - [ ] The same signal reaches `board.md`, so an agent reading the summary sees it too.
 - [ ] Tests cover: all blockers done, some unfinished, a blocker that is archived, a ticket with no
       blockers, and the generated output.
@@ -56,7 +54,10 @@ exactly the Done-versus-Archived conflation `AGENTS.md` warns about.
 
 The card treatment matters more than the warning dialog. A warning appears once, at the moment of
 the drag, when the decision is already made; a persistent "ready to start" affordance is what
-actually changes which ticket gets picked up.
+actually changes which ticket gets picked up. That affordance now belongs to KMD-020, which fixes
+the card reading as blocked when its blockers are finished. This ticket keeps the drag-time
+advisory, and the two must share one definition of "unfinished" rather than each writing their own —
+whichever lands first defines it.
 
 ## Human work
 

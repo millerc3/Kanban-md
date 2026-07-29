@@ -36,6 +36,7 @@ Source: .kanban/tickets/*.md
 | KMD-013 | Edit ticket fields from the drawer | medium | — |
 | KMD-015 | Warn when starting a ticket with unfinished blockers | low | — |
 | KMD-016 | Choose a ticket type and get a matching body template | low | KMD-011 |
+| KMD-020 | Only flag a card as blocked when a blocker is unfinished | low | — |
 
 ## Done
 
