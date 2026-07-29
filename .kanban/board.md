@@ -24,7 +24,8 @@ Source: .kanban/tickets/*.md
 |---|---|---|---|
 | KMD-005 | Add a ticket query CLI for agents | low | — |
 | KMD-014 | Validate priority and show it in the board summary | low | — |
-| KMD-017 | Create tickets through a tool instead of by hand | low | — |
+| KMD-018 | Validate a new ticket's body has the sections it needs | medium | KMD-011, KMD-017 |
+| KMD-019 | Keep apostrophes from splitting words in ticket filenames | low | KMD-017 |
 
 ### Interface
 
@@ -35,6 +36,12 @@ Source: .kanban/tickets/*.md
 | KMD-013 | Edit ticket fields from the drawer | medium | — |
 | KMD-015 | Warn when starting a ticket with unfinished blockers | low | — |
 | KMD-016 | Choose a ticket type and get a matching body template | low | KMD-011 |
+
+## Review
+
+| ID | Ticket | Category | Intervention | Blocked by |
+|---|---|---|---|---|
+| KMD-017 | Create tickets through a tool instead of by hand | Storage | low | — |
 
 ## Done
 

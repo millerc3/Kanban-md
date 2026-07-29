@@ -54,11 +54,15 @@ The only runtime dependency is the pinned Flask version in
 - `static/styles.css` — all UI styling.
 - `tools/regenerate_board.py` — canonical board generator, validator, and ticket
   ID allocator.
+- `tools/create_ticket.py` — canonical ticket creation, shared by the CLI and
+  `POST /api/tickets`.
 - `tools/migrate_ticket_ids.py` — one-off migration that adopts project-assigned
   ticket IDs in an existing project.
 - `tools/sync_tools.py` — refreshes canonical portable tools in a target project.
 - `tests/test_app.py` — Flask API and UI-contract tests.
 - `tests/test_regenerate_board.py` — generator, validation, CLI, and atomic-write
+  tests.
+- `tests/test_create_ticket.py` — creation, rollback, and concurrent-allocation
   tests.
 - `tests/test_migrate_ticket_ids.py` — migration planning, rewriting, and
   rollback tests.
@@ -78,7 +82,8 @@ layout is:
 ├── board.yaml
 ├── board.md
 ├── tools/
-│   └── regenerate_board.py
+│   ├── regenerate_board.py
+│   └── create_ticket.py
 ├── tickets/
 └── archive/
     └── <year>/
@@ -108,6 +113,34 @@ The generator requires these frontmatter fields:
 `blocked_by`, `tags`, and `source` are lists. Both inline and block-list syntax
 are supported.
 
+## Creating a ticket
+
+Create tickets with the canonical tool, never by hand:
+
+```sh
+python3 .kanban/tools/create_ticket.py --title "Short imperative title" \
+  --category Storage --type feature --tags cli,agents --body-file body.md
+```
+
+One invocation allocates the ID, writes complete frontmatter, records the
+high-water mark, and regenerates the board. It prints the assigned ID and path;
+`--json` prints them as `{"id": ..., "path": ...}` for chaining. Any failure
+leaves nothing behind — no file, no consumed ID, no half-updated `board.yaml` —
+and exits nonzero.
+
+Supply the body and nothing else. `--body-file PATH` is the usual form;
+`--body-stdin` reads the body from a pipe. Prefer the file form: ticket bodies
+contain backticks, `$`, and quotes, and piping puts all of them through the
+shell. Without a body, the tool falls back to the type template.
+
+Never pass `--id`. Never assemble frontmatter by hand. Never add a second
+allocator: `tools/create_ticket.py` is the one implementation, and
+`POST /api/tickets` is a caller of it.
+
+A person may still write a ticket file in an editor — that is what portable
+Markdown means, and the generator keeps accepting such files. What the tool
+replaces is agents performing allocation.
+
 ## Ticket IDs are assigned by the project
 
 IDs are not chosen per ticket. `board.yaml` declares `id_prefix`, `id_padding`,
@@ -115,16 +148,16 @@ and `id_sequence`, and the next ID is one past the larger of the recorded
 high-water mark and the highest number across active and archived tickets. A
 deleted ticket therefore never releases its number.
 
-Before hand-writing a ticket file, get its ID from the canonical tool:
+Allocation must stay reserve-by-create — the ID is only ever handed out
+together with the file that claims it — so a concurrent agent cannot be given
+the same number. The reservation is a claim marker keyed on the ID alone, so
+two callers choosing different titles cannot both win one number, and it is
+deliberately not a `.md` file: an abandoned reservation visible to a board scan
+would make an unrelated process roll back its own valid ticket.
 
-```sh
-python3 .kanban/tools/regenerate_board.py --next-id
-```
-
-Do not invent an ID, reuse one, or add a second allocator. The API rejects a
-client-supplied ID, and allocation must stay reserve-by-create — the ID is only
-ever handed out together with the file that claims it — so a concurrent agent
-cannot be given the same number.
+`--next-id` still reports the next ID as a query, but the value is advisory and
+is not reserved. Do not read it and then write a file; that is the read-then-
+write race the tool exists to remove.
 
 IDs that predate the scheme remain valid; `--strict-ids` reports them for
 projects that want the format enforced. `tools/migrate_ticket_ids.py` adopts the
@@ -174,6 +207,37 @@ The Flask API automatically invokes the canonical generator after successful
 ticket creation and status changes. A failed validation rolls back the attempted
 mutation. Any future API that edits, archives, restores, renames, or deletes a
 ticket must provide the same regenerate-or-rollback guarantee.
+
+Ticket creation itself lives in `tools/create_ticket.py`, which regenerates and
+rolls back on the caller's behalf. A change to what a new ticket contains
+belongs in that module, not in the Flask endpoint, or the CLI and the web UI
+will drift apart.
+
+## Working a ticket
+
+The board is how a person sees what an agent is doing, so keep it truthful as
+you go rather than at the end.
+
+When you start work on a ticket, set its `status` to `in_progress` before
+writing any code. When you stop being able to make progress — a decision you
+need from a person, an unlanded dependency — set it to `blocked` and say in the
+ticket what would unblock it.
+
+When the work is finished and needs a person to look at it, set `status` to
+`review`. That is where an agent's work ends. Do not set `done` yourself: `done`
+is the client's judgement that the work is acceptable, not the agent's claim
+that the code compiles. Do not archive a ticket unless asked.
+
+Also tick the acceptance criteria you actually satisfied, and leave the rest
+unticked. An unticked box in a `review` ticket is a useful signal; a ticked box
+that is not true is worse than no ticket at all.
+
+Status lives in the ticket file, so a status change is an ordinary ticket edit:
+update `status`, update `updated` to today, then regenerate the board.
+
+```sh
+python3 .kanban/tools/regenerate_board.py
+```
 
 ## Current ticket and archive behavior
 

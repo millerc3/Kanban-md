@@ -1,7 +1,7 @@
 ---
 id: KMD-017
 title: Create tickets through a tool instead of by hand
-status: inbox
+status: review
 category: Storage
 intervention: low
 priority: high
@@ -10,7 +10,7 @@ blocked_by: []
 tags: [cli, agents, ids, correctness]
 source: [AGENTS.md#ticket-ids-are-assigned-by-the-project]
 created: 2026-07-28
-updated: 2026-07-28
+updated: 2026-07-29
 ---
 
 ## Goal
@@ -47,27 +47,27 @@ first and never touch the second.
 
 ## Acceptance criteria
 
-- [ ] A portable tool creates a ticket from supplied parameters in one invocation.
-- [ ] It allocates the ID, writes complete frontmatter, records the high-water mark, and regenerates
+- [x] A portable tool creates a ticket from supplied parameters in one invocation.
+- [x] It allocates the ID, writes complete frontmatter, records the high-water mark, and regenerates
       the board.
-- [ ] The ticket body is supplied by the caller — via a file or stdin — and falls back to the type
+- [x] The ticket body is supplied by the caller — via a file or stdin — and falls back to the type
       template when absent. The caller never writes frontmatter.
-- [ ] Accepting a caller-supplied ID is refused, matching the HTTP endpoint.
-- [ ] Any failure leaves nothing behind: no orphan file, no consumed ID, no half-updated
+- [x] Accepting a caller-supplied ID is refused, matching the HTTP endpoint.
+- [x] Any failure leaves nothing behind: no orphan file, no consumed ID, no half-updated
       `board.yaml`, and a nonzero exit.
-- [ ] It prints the assigned ID and path, with a machine-readable form for chaining.
-- [ ] Creation logic lives in one module shared by this tool and `POST /api/tickets`; the endpoint
+- [x] It prints the assigned ID and path, with a machine-readable form for chaining.
+- [x] Creation logic lives in one module shared by this tool and `POST /api/tickets`; the endpoint
       becomes a caller rather than a parallel implementation.
-- [ ] The shared module is standard-library-only and runs from any working directory, so it works as
+- [x] The shared module is standard-library-only and runs from any working directory, so it works as
       a portable copy under `.kanban/tools/`.
-- [ ] `tools/sync_tools.py` carries it, and it reaches existing projects through the automatic
+- [x] `tools/sync_tools.py` carries it, and it reaches existing projects through the automatic
       compare-and-repair.
-- [ ] Exclusive creation is keyed on the ID alone, so two processes cannot claim one number by
+- [x] Exclusive creation is keyed on the ID alone, so two processes cannot claim one number by
       writing different filenames.
-- [ ] Tests cover: a successful create, a rejected caller-supplied ID, a body from file and from
+- [x] Tests cover: a successful create, a rejected caller-supplied ID, a body from file and from
       stdin, the template fallback, rollback on validation failure, and concurrent allocation from
       two processes yielding two distinct IDs.
-- [ ] `AGENTS.md`, `README.md`, and `docs/SCHEMA.md` document the command and stop presenting
+- [x] `AGENTS.md`, `README.md`, and `docs/SCHEMA.md` document the command and stop presenting
       `--next-id` as a step toward hand-writing a ticket.
 
 ## Implementation notes

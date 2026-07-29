@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Sequence
 
 
-PORTABLE_TOOLS = ("regenerate_board.py", "migrate_ticket_ids.py")
+PORTABLE_TOOLS = (
+    "regenerate_board.py",
+    "migrate_ticket_ids.py",
+    "create_ticket.py",
+)
 DRIFT_FOUND = 1
 SYNC_ERROR = 2
 

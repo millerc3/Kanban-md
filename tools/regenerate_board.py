@@ -609,7 +609,11 @@ def _argument_parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--next-id",
         action="store_true",
-        help="print the next available ticket id without writing anything",
+        help=(
+            "print the next available ticket id without writing anything; "
+            "the value is advisory and is not reserved, so create tickets with "
+            "create_ticket.py rather than acting on it"
+        ),
     )
     return parser
 

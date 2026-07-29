@@ -43,17 +43,44 @@ locally and is never uploaded.
 
 See [docs/SCHEMA.md](docs/SCHEMA.md) for the portable file format.
 
+## Creating tickets from the command line
+
+The browser UI is one way to create a ticket. From a terminal — or from a
+coding agent working in one — use the portable tool instead:
+
+```sh
+python3 .kanban/tools/create_ticket.py --title "Short imperative title" --category Storage --body-file body.md
+```
+
+That single command assigns the ID, writes the frontmatter, and regenerates
+`board.md`, then prints the ID and path it created. Add `--json` to get
+`{"id": ..., "path": ...}` for scripting. If anything fails validation, nothing
+is written at all and the command exits nonzero.
+
+The body is yours: `--body-file PATH`, or `--body-stdin` to read from a pipe.
+Leave both off and the ticket starts from the template for its type. Everything
+else is a flag — `--status`, `--intervention`, `--priority`, `--type`, `--tags`,
+`--blocked-by`, `--source` — and `--kanban PATH` points at a project other than
+the one containing your working directory.
+
+Writing a ticket file by hand in an editor still works and always will. The
+tool exists so that nobody has to remember the mechanical parts.
+
 ## Ticket IDs
 
 Ticket IDs are assigned by the project, not typed in by hand. `board.yaml`
 declares a prefix and a high-water mark, and each new ticket takes the next
 number. Deleting a ticket never releases its number for reuse.
 
-Agents creating ticket files directly can read the next ID with:
+To read the next ID without creating anything:
 
 ```sh
 python3 .kanban/tools/regenerate_board.py --next-id
 ```
+
+That is a query, not a reservation. Two people running it at the same moment
+get the same answer, so create tickets with `create_ticket.py`, which claims
+the number and writes the file as one step.
 
 ### Converting an existing project
 
@@ -102,7 +129,8 @@ without `.kanban` still works and leaves it untouched until initialization.
 edited; the Markdown files under `.kanban/tickets/` and `.kanban/archive/` are
 authoritative.
 
-After creating, editing, moving, or archiving tickets, agents must run:
+`create_ticket.py` and the browser UI regenerate the summary themselves. After
+editing, moving, or archiving ticket files by hand, run:
 
 ```sh
 python3 .kanban/tools/regenerate_board.py

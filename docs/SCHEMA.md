@@ -12,6 +12,7 @@ database.
 ├── board.md
 ├── tools/
 │   ├── regenerate_board.py
+│   ├── create_ticket.py
 │   └── migrate_ticket_ids.py
 ├── tickets/
 │   └── PROJ-123-descriptive-title.md
@@ -24,6 +25,9 @@ database.
   authoritative and must never be manually edited.
 - `tools/regenerate_board.py` is the portable, standard-library-only board
   generator.
+- `tools/create_ticket.py` is the portable, standard-library-only ticket
+  creator. It is the single implementation of creation, shared with the
+  application's `POST /api/tickets`.
 - `tools/migrate_ticket_ids.py` adopts project-assigned ticket ids in a project
   that used its own numbering.
 - `tickets/` contains every active ticket in one flat directory.
@@ -58,8 +62,8 @@ can use the app's normal initialization flow.
 
 ## Regenerating and validating the board
 
-After creating, editing, moving, or archiving any ticket, agents must run this
-from the project root:
+`create_ticket.py` regenerates the board itself. After editing, moving, or
+archiving any ticket by hand, run this from the project root:
 
 ```sh
 python3 .kanban/tools/regenerate_board.py
@@ -100,11 +104,28 @@ All three fields are optional. A project without `id_prefix` keeps whatever ids
 its tickets already use, and the application refuses to assign new ones until
 the scheme is adopted.
 
+New tickets are created with the portable tool, which claims the id and writes
+the file as a single step:
+
+```sh
+python3 .kanban/tools/create_ticket.py --title "Short imperative title" --category Storage --body-file body.md
+```
+
+It writes every required field below, records the high-water mark, regenerates
+`board.md`, and prints the assigned id and path — `--json` for a machine-
+readable form. The body comes from `--body-file PATH` or `--body-stdin`, and
+falls back to the template for the ticket's type. A caller-supplied `--id` is
+refused, matching `POST /api/tickets`.
+
 To read the next id without writing anything:
 
 ```sh
 python3 .kanban/tools/regenerate_board.py --next-id
 ```
+
+This is a query and does not reserve the id. Concurrent callers receive the
+same answer, so use `create_ticket.py` to create a ticket rather than acting on
+this value.
 
 Ids that predate the scheme stay valid. `--strict-ids` reports them when you
 want that enforced:
