@@ -1,7 +1,7 @@
 ---
 id: KMD-017
 title: Create tickets through a tool instead of by hand
-status: review
+status: done
 category: Storage
 intervention: low
 priority: high

@@ -37,12 +37,6 @@ Source: .kanban/tickets/*.md
 | KMD-015 | Warn when starting a ticket with unfinished blockers | low | — |
 | KMD-016 | Choose a ticket type and get a matching body template | low | KMD-011 |
 
-## Review
-
-| ID | Ticket | Category | Intervention | Blocked by |
-|---|---|---|---|---|
-| KMD-017 | Create tickets through a tool instead of by hand | Storage | low | — |
-
 ## Done
 
 | ID | Ticket | Category | Intervention | Blocked by |
@@ -53,6 +47,7 @@ Source: .kanban/tickets/*.md
 | KMD-004 | Add drag-and-drop movement | Interface | low | KMD-002 |
 | KMD-006 | Sync portable tools into a target project | Storage | low | — |
 | KMD-007 | Open a project from a startup path argument | Interface | low | — |
+| KMD-017 | Create tickets through a tool instead of by hand | Storage | low | — |
 
 ## Archive
 
