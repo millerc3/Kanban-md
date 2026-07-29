@@ -10,11 +10,31 @@ Source: .kanban/tickets/*.md
 
 ## Inbox
 
+### Product
+
+| ID | Ticket | Intervention | Blocked by |
+|---|---|---|---|
+| KMD-008 | Add a POSIX launcher and document non-Windows use | medium | — |
+| KMD-009 | Write agent instructions into a project during initialization | low | KMD-017 |
+| KMD-010 | Add an end-to-end walkthrough to the README | low | KMD-008, KMD-009 |
+
 ### Storage
 
 | ID | Ticket | Intervention | Blocked by |
 |---|---|---|---|
 | KMD-005 | Add a ticket query CLI for agents | low | — |
+| KMD-014 | Validate priority and show it in the board summary | low | — |
+| KMD-017 | Create tickets through a tool instead of by hand | low | — |
+
+### Interface
+
+| ID | Ticket | Intervention | Blocked by |
+|---|---|---|---|
+| KMD-011 | Capture stub tickets for an agent to flesh out | medium | — |
+| KMD-012 | Archive a ticket by dragging it out of the board | medium | — |
+| KMD-013 | Edit ticket fields from the drawer | medium | — |
+| KMD-015 | Warn when starting a ticket with unfinished blockers | low | — |
+| KMD-016 | Choose a ticket type and get a matching body template | low | KMD-011 |
 
 ## Done
 
