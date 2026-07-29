@@ -91,6 +91,125 @@ class KanbanApiTests(unittest.TestCase):
         self.assertIn("category: Testing", source)
         self.assertIn("source: [web-ui]", source)
 
+    def write_ticket(self, ticket_id, *, status="ready", blocked_by="[]", archive=False):
+        directory = self.project / ".kanban" / (
+            "archive/2025" if archive else "tickets"
+        )
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{ticket_id}.md"
+        path.write_text(
+            f"""\
+---
+id: {ticket_id}
+title: {ticket_id}
+status: {status}
+category: Testing
+intervention: low
+type: feature
+blocked_by: {blocked_by}
+tags: []
+source: [test]
+---
+
+Body.
+""",
+            encoding="utf-8",
+        )
+        return path
+
+    def tickets_by_id(self):
+        response = self.client.get("/api/tickets")
+        self.assertEqual(response.status_code, 200)
+        return {
+            ticket["id"]: ticket for ticket in response.get_json()["tickets"]
+        }
+
+    def test_payload_carries_blocker_state_for_each_dependency(self):
+        self.open_and_initialize()
+        self.write_ticket("T1", status="done")
+        self.write_ticket("T2", status="ready")
+        self.write_ticket("T3", blocked_by="[T1, T2]")
+        self.write_ticket("T4", blocked_by="[T1]")
+        self.write_ticket("T5")
+
+        tickets = self.tickets_by_id()
+
+        self.assertEqual(
+            tickets["T3"]["blockers"],
+            [
+                {"id": "T1", "status": "done", "state": "satisfied"},
+                {"id": "T2", "status": "ready", "state": "unfinished"},
+            ],
+        )
+        self.assertEqual(
+            tickets["T4"]["blockers"],
+            [{"id": "T1", "status": "done", "state": "satisfied"}],
+        )
+        self.assertEqual(tickets["T5"]["blockers"], [])
+
+    def test_payload_resolves_an_archived_blocker_the_client_cannot_see(self):
+        self.open_and_initialize()
+        self.write_ticket("OLD1", status="done", archive=True)
+        self.write_ticket("OLD2", status="inbox", archive=True)
+        self.write_ticket("T1", blocked_by="[OLD1, OLD2]")
+
+        tickets = self.tickets_by_id()
+
+        self.assertEqual(
+            tickets["T1"]["blockers"],
+            [
+                {"id": "OLD1", "status": "done", "state": "satisfied"},
+                {"id": "OLD2", "status": "inbox", "state": "unfinished"},
+            ],
+        )
+        self.assertNotIn("OLD1", tickets)
+
+    def test_unknown_blocker_id_is_never_reported_as_satisfied(self):
+        self.open_and_initialize()
+        self.write_ticket("T1", blocked_by="[GONE]")
+
+        tickets = self.tickets_by_id()
+
+        self.assertEqual(
+            tickets["T1"]["blockers"],
+            [{"id": "GONE", "status": "", "state": "unknown"}],
+        )
+
+    def test_malformed_file_does_not_blank_the_board_or_satisfy_blockers(self):
+        self.open_and_initialize()
+        self.write_ticket("T1", status="done")
+        self.write_ticket("T2", blocked_by="[T1, BROKEN]")
+        (self.project / ".kanban" / "tickets" / "BROKEN.md").write_text(
+            "not a ticket at all\n", encoding="utf-8"
+        )
+
+        response = self.client.get("/api/tickets")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+
+        self.assertEqual(payload["invalid_files"], ["BROKEN.md"])
+        tickets = {ticket["id"]: ticket for ticket in payload["tickets"]}
+        self.assertEqual({"T1", "T2"}, set(tickets))
+        self.assertEqual(
+            tickets["T2"]["blockers"],
+            [
+                {"id": "T1", "status": "done", "state": "satisfied"},
+                {"id": "BROKEN", "status": "", "state": "unknown"},
+            ],
+        )
+
+    def test_blocker_state_does_not_hide_or_reorder_tickets(self):
+        self.open_and_initialize()
+        self.write_ticket("T1", status="ready")
+        self.write_ticket("T2", blocked_by="[T1]")
+        self.write_ticket("T3", status="done")
+
+        payload = self.client.get("/api/tickets").get_json()
+
+        self.assertEqual(
+            [ticket["id"] for ticket in payload["tickets"]], ["T1", "T2", "T3"]
+        )
+
     def test_ticket_ids_are_assigned_in_sequence(self):
         self.open_and_initialize()
 

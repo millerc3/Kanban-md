@@ -173,6 +173,63 @@ unknown_future_field: preserved-by-ticket-owner
         self.assertIn("A1.md", str(caught.exception))
         self.assertIn("A1-copy.md", str(caught.exception))
 
+    def test_board_reports_the_state_of_each_blocker(self):
+        self.write_ticket("OLD1", status="done", archive=True)
+        self.write_ticket("A1", status="done")
+        self.write_ticket("A2", status="ready")
+        self.write_ticket("A3", blocked_by="[A1, A2, OLD1]")
+
+        content = board_generator.generate_board(self.kanban)
+
+        self.assertIn("A1 (done), A2 (ready), OLD1 (done)", content)
+
+    def test_blocker_state_treats_only_done_as_satisfied(self):
+        self.assertEqual(board_generator.blocker_state("done"), "satisfied")
+        self.assertEqual(board_generator.blocker_state("ready"), "unfinished")
+        self.assertEqual(board_generator.blocker_state("review"), "unfinished")
+        self.assertEqual(board_generator.blocker_state(None), "unknown")
+
+    def test_blocker_states_keep_ticket_order_and_carry_ids(self):
+        states = board_generator.blocker_states(
+            ["A2", "A1", "GONE"], {"A1": "done", "A2": "ready"}
+        )
+        self.assertEqual(
+            states,
+            [
+                {"id": "A2", "status": "ready", "state": "unfinished"},
+                {"id": "A1", "status": "done", "state": "satisfied"},
+                {"id": "GONE", "status": "", "state": "unknown"},
+            ],
+        )
+
+    def test_collected_statuses_span_active_and_archive(self):
+        self.write_ticket("A1", status="ready")
+        self.write_ticket("OLD1", status="done", archive=True)
+        self.write_ticket("OLD2", status="inbox", archive=True)
+
+        statuses = board_generator.collect_ticket_statuses(self.kanban)
+
+        self.assertEqual(
+            statuses, {"A1": "ready", "OLD1": "done", "OLD2": "inbox"}
+        )
+        self.assertEqual(
+            board_generator.blocker_state(statuses["OLD1"]), "satisfied"
+        )
+        self.assertEqual(
+            board_generator.blocker_state(statuses["OLD2"]), "unfinished"
+        )
+
+    def test_collected_statuses_skip_malformed_files_without_raising(self):
+        self.write_ticket("A1", status="done")
+        (self.kanban / "tickets" / "BROKEN.md").write_text(
+            "no frontmatter here\n", encoding="utf-8"
+        )
+
+        statuses = board_generator.collect_ticket_statuses(self.kanban)
+
+        self.assertEqual(statuses, {"A1": "done"})
+        self.assertEqual(board_generator.blocker_state(statuses.get("B1")), "unknown")
+
     def test_missing_dependency_is_rejected(self):
         path = self.write_ticket("A1", blocked_by="[MISSING]")
         with self.assertRaises(board_generator.ValidationError) as caught:

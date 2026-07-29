@@ -61,4 +61,7 @@ whichever lands first defines it.
 
 ## Human work
 
-Decide whether an archived blocker counts as satisfied.
+None outstanding. KMD-020 landed first and made the call: a blocker is satisfied only when its own
+`status` is `done`, regardless of whether it sits under `tickets/` or `archive/`. It is written down
+in `docs/SCHEMA.md` under "Dependencies" and implemented as `blocker_state()` in
+`regenerate_board.py`. This ticket calls that function; it does not restate the rule.

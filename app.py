@@ -21,6 +21,8 @@ from tools.regenerate_board import (
     DEFAULT_ID_PADDING,
     ValidationError,
     allocate_ticket_id,
+    blocker_states,
+    collect_ticket_statuses,
     regenerate_board,
 )
 from tools.sync_tools import SyncError, sync_tools as sync_portable_tools
@@ -195,6 +197,16 @@ def project_payload(
                 tickets.append(ticket)
             else:
                 invalid_files.append(path.name)
+
+    # The browser only ever sees `tickets/`, so it cannot tell a finished
+    # blocker from one that does not exist. Resolve that here, where the
+    # archive is on disk, using the generator's definition of satisfied.
+    try:
+        statuses = collect_ticket_statuses(project / ".kanban")
+    except OSError:
+        statuses = {}
+    for ticket in tickets:
+        ticket["blockers"] = blocker_states(ticket["blocked_by"], statuses)
 
     return {
         "project": str(project),

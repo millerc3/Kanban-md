@@ -28,6 +28,10 @@ REQUIRED_FIELDS = (
     "source",
 )
 PLANNING_STATUSES = {"inbox", "ready", "blocked"}
+SATISFIED_STATUSES = {"done"}
+BLOCKER_SATISFIED = "satisfied"
+BLOCKER_UNFINISHED = "unfinished"
+BLOCKER_UNKNOWN = "unknown"
 ID_PREFIX_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 DEFAULT_ID_PADDING = 3
 GENERATED_WARNING = """<!--
@@ -365,6 +369,67 @@ def load_and_validate(kanban: Path) -> tuple[BoardConfig, list[Ticket], list[Tic
     )
 
 
+def blocker_state(status: str | None) -> str:
+    """Classify one blocker from its status, or None when no ticket has that id.
+
+    A blocker is satisfied only when its own status says the work concluded.
+    Living under `archive/` is a filesystem lifecycle state and says nothing
+    about whether the work was finished or abandoned, so it is not consulted
+    here. This is the single definition of "satisfied"; every surface that
+    reports blocker state must call through it rather than restate the rule.
+    """
+
+    if status is None:
+        return BLOCKER_UNKNOWN
+    return BLOCKER_SATISFIED if status in SATISFIED_STATUSES else BLOCKER_UNFINISHED
+
+
+def blocker_states(
+    blocked_by: Sequence[str], statuses: dict[str, str]
+) -> list[dict[str, str]]:
+    """Describe each blocker as {id, status, state}, preserving ticket order."""
+
+    described = []
+    for dependency in blocked_by:
+        status = statuses.get(dependency)
+        described.append(
+            {
+                "id": dependency,
+                "status": status or "",
+                "state": blocker_state(status),
+            }
+        )
+    return described
+
+
+def collect_ticket_statuses(kanban: Path) -> dict[str, str]:
+    """Map every readable ticket id to its status, across active and archive.
+
+    Deliberately tolerant where `load_and_validate` is strict: a file that does
+    not parse is skipped rather than raised on, because callers that render an
+    invalid board still need blocker state for the tickets that are fine. A
+    skipped file leaves its id absent, which reads as unknown — never as
+    satisfied.
+    """
+
+    statuses: dict[str, str] = {}
+    paths = list(sorted((kanban / "tickets").glob("*.md")))
+    paths.extend(sorted((kanban / "archive").rglob("*.md")))
+    for path in paths:
+        try:
+            values = _frontmatter(path)
+        except (ValidationError, OSError, UnicodeError, ValueError):
+            continue
+        ticket_id = values.get("id")
+        status = values.get("status")
+        if not isinstance(ticket_id, str) or not ticket_id.strip():
+            continue
+        if not isinstance(status, str) or not status.strip():
+            continue
+        statuses.setdefault(ticket_id.strip(), status.strip())
+    return statuses
+
+
 def ticket_number(ticket_id: str, prefix: str) -> int | None:
     """Return the sequence number of an id in the project scheme, else None."""
 
@@ -442,7 +507,22 @@ def _heading(value: str) -> str:
     return value.replace("_", " ").title()
 
 
-def _ticket_rows(tickets: Sequence[Ticket], include_category: bool) -> list[str]:
+def _blocked_by_cell(ticket: Ticket, statuses: dict[str, str]) -> str:
+    """Render blockers with the state that decides whether they still hold."""
+
+    described = blocker_states(ticket.blocked_by, statuses)
+    return (
+        ", ".join(
+            f"{blocker['id']} ({blocker['status'] or BLOCKER_UNKNOWN})"
+            for blocker in described
+        )
+        or "—"
+    )
+
+
+def _ticket_rows(
+    tickets: Sequence[Ticket], include_category: bool, statuses: dict[str, str]
+) -> list[str]:
     headers = ["ID", "Ticket"]
     if include_category:
         headers.append("Category")
@@ -455,15 +535,14 @@ def _ticket_rows(tickets: Sequence[Ticket], include_category: bool) -> list[str]
         cells = [ticket.id, ticket.title]
         if include_category:
             cells.append(ticket.category)
-        cells.extend(
-            [ticket.intervention, ", ".join(ticket.blocked_by) or "—"]
-        )
+        cells.extend([ticket.intervention, _blocked_by_cell(ticket, statuses)])
         lines.append("| " + " | ".join(_escape_table(cell) for cell in cells) + " |")
     return lines
 
 
 def generate_board(kanban: Path) -> str:
     config, active, archived = load_and_validate(kanban)
+    statuses = {ticket.id: ticket.status for ticket in (*active, *archived)}
     lines = [
         GENERATED_WARNING,
         "",
@@ -500,11 +579,16 @@ def generate_board(kanban: Path) -> str:
                             if ticket.category == category
                         ],
                         include_category=False,
+                        statuses=statuses,
                     )
                 )
                 lines.append("")
         else:
-            lines.extend(_ticket_rows(status_tickets, include_category=True))
+            lines.extend(
+                _ticket_rows(
+                    status_tickets, include_category=True, statuses=statuses
+                )
+            )
             lines.append("")
 
     lines.extend(

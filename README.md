@@ -41,6 +41,11 @@ py -3 -m venv .venv
 The server binds only to `127.0.0.1`. Project content is read and written
 locally and is never uploaded.
 
+A card lists the tickets it is blocked by, and flags itself only while at least
+one of them is unfinished. A blocker counts as finished when its status is
+`done`, whether it is still on the board or has been archived; a blocker naming
+no existing ticket is marked unknown rather than assumed complete.
+
 See [docs/SCHEMA.md](docs/SCHEMA.md) for the portable file format.
 
 ## Creating tickets from the command line
@@ -128,6 +133,10 @@ without `.kanban` still works and leaves it untouched until initialization.
 `.kanban/board.md` is generated and disposable. It must never be manually
 edited; the Markdown files under `.kanban/tickets/` and `.kanban/archive/` are
 authoritative.
+
+Its "Blocked by" column names each blocker with its current status, as
+`KMD-017 (done)`, so an agent reading the summary can tell an outstanding
+dependency from a settled one without cross-referencing.
 
 `create_ticket.py` and the browser UI regenerate the summary themselves. After
 editing, moving, or archiving ticket files by hand, run:

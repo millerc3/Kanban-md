@@ -1,7 +1,7 @@
 ---
 id: KMD-020
 title: Only flag a card as blocked when a blocker is unfinished
-status: inbox
+status: done
 category: Interface
 intervention: low
 priority: high
@@ -56,20 +56,20 @@ would trade one lie for a worse one.
 
 ## Acceptance criteria
 
-- [ ] A card whose blockers are all satisfied is not flagged as blocked. The dependency stays
+- [x] A card whose blockers are all satisfied is not flagged as blocked. The dependency stays
       visible and de-emphasized, because the ordering is still useful context.
-- [ ] A card with at least one unfinished blocker keeps the flagged treatment and names which
+- [x] A card with at least one unfinished blocker keeps the flagged treatment and names which
       blockers are outstanding, not merely that something is.
-- [ ] Blocker state is computed on the server and carried in the ticket payload. The client never
+- [x] Blocker state is computed on the server and carried in the ticket payload. The client never
       infers it from the ids alone.
-- [ ] The computation reads both active and archived tickets.
-- [ ] A blocker id that matches no ticket renders as unknown, visually distinct from both satisfied
+- [x] The computation reads both active and archived tickets.
+- [x] A blocker id that matches no ticket renders as unknown, visually distinct from both satisfied
       and unfinished.
-- [ ] "Satisfied" is defined once and shared by the payload and `board.md`, so the card and the
+- [x] "Satisfied" is defined once and shared by the payload and `board.md`, so the card and the
       summary cannot disagree.
-- [ ] A malformed ticket file does not raise, blank the board, or silently mark blockers satisfied.
-- [ ] No ticket is hidden, filtered, or reordered by this change.
-- [ ] Tests cover: all blockers done, one unfinished, an archived blocker, an unknown id, a ticket
+- [x] A malformed ticket file does not raise, blank the board, or silently mark blockers satisfied.
+- [x] No ticket is hidden, filtered, or reordered by this change.
+- [x] Tests cover: all blockers done, one unfinished, an archived blocker, an unknown id, a ticket
       with no blockers, a malformed file present, and the shape of the payload field.
 
 ## Implementation notes
@@ -96,6 +96,12 @@ second one. KMD-005's query CLI is a later third caller.
 
 ## Human work
 
-Decide whether an archived blocker counts as satisfied — the same open decision recorded on KMD-015,
-and the only thing here that is not already determined. Also confirm the treatment for a satisfied
-dependency and for an unknown one, since three states now share one line of the card.
+Decided: a blocker is satisfied only when its own `status` is `done`. Living under `archive/` does
+not make it satisfied, because archiving records a filesystem lifecycle, not a claim that the work
+concluded — an archived ticket abandoned at `inbox` still reads as outstanding. Written down in
+`docs/SCHEMA.md` under "Dependencies", implemented once as `blocker_state()`, and inherited by
+KMD-015 and KMD-005 rather than restated.
+
+Remaining: the `unknown` treatment has not been seen on screen. A valid board cannot produce one —
+the generator rejects a dependency naming no ticket — so it only appears on a board rendered through
+`invalid_files`. It is currently a dashed orange outline, and tests cover the state, not the look.

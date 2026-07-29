@@ -174,8 +174,18 @@ h1, h2, h3, p { margin-top: 0; }
 .intervention-medium { background: #f6e8bd; color: #7d5a09; }
 .intervention-high { background: #f4d9d5; color: #913b38; }
 .dependency {
-  border-top: 1px dashed var(--line); color: var(--red); display: block;
-  font-size: 10px; margin-top: 10px; padding-top: 8px;
+  align-items: center; border-top: 1px dashed var(--line); color: var(--muted);
+  display: flex; flex-wrap: wrap; font-size: 10px; gap: 5px; margin-top: 10px;
+  padding-top: 8px;
+}
+.dependency-label { text-transform: uppercase; letter-spacing: .04em; }
+.dependency-blocked .dependency-label { color: var(--red); font-weight: 700; }
+.blocker { border-radius: 4px; font-family: monospace; padding: 2px 5px; }
+.blocker-satisfied { color: var(--muted); text-decoration: line-through; }
+.blocker-unfinished { background: #f4d9d5; color: var(--red); font-weight: 700; }
+.blocker-unknown {
+  border: 1px dashed var(--orange); color: var(--orange); font-weight: 700;
+  padding: 1px 4px;
 }
 .empty { color: #929a97; font-size: 11px; padding: 12px 2px; }
 footer {

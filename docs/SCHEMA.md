@@ -182,6 +182,23 @@ The initial workflow is:
 
 `blocked` is an explicit status and may be entered from any active state.
 
+### Dependencies
+
+`blocked_by` lists the ids of tickets this one waits on. Every entry must name
+an active or archived ticket; the generator rejects an id that matches neither.
+
+A blocker is **satisfied** when its own `status` is `done`, and outstanding
+otherwise. Where the file lives does not enter into it: `archive/` is a
+filesystem lifecycle state, not a claim that work concluded, so an archived
+ticket abandoned at `inbox` still reads as outstanding.
+
+This definition lives in one place — `blocker_state()` in
+`regenerate_board.py` — and every surface calls through it, so the board
+summary and the browser UI cannot disagree. `board.md` writes each blocker as
+`ID (status)`, and the UI flags a card only when at least one blocker is
+outstanding. A blocker whose id matches no ticket at all is reported as unknown
+and never counts as satisfied.
+
 ### Category
 
 `category` is a first-class planning dimension such as `Networking`, `Enemies`,

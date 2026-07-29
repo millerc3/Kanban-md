@@ -15,8 +15,8 @@ Source: .kanban/tickets/*.md
 | ID | Ticket | Intervention | Blocked by |
 |---|---|---|---|
 | KMD-008 | Add a POSIX launcher and document non-Windows use | medium | — |
-| KMD-009 | Write agent instructions into a project during initialization | low | KMD-017 |
-| KMD-010 | Add an end-to-end walkthrough to the README | low | KMD-008, KMD-009 |
+| KMD-009 | Write agent instructions into a project during initialization | low | KMD-017 (done) |
+| KMD-010 | Add an end-to-end walkthrough to the README | low | KMD-008 (inbox), KMD-009 (inbox) |
 
 ### Storage
 
@@ -24,8 +24,8 @@ Source: .kanban/tickets/*.md
 |---|---|---|---|
 | KMD-005 | Add a ticket query CLI for agents | low | — |
 | KMD-014 | Validate priority and show it in the board summary | low | — |
-| KMD-018 | Validate a new ticket's body has the sections it needs | medium | KMD-011, KMD-017 |
-| KMD-019 | Keep apostrophes from splitting words in ticket filenames | low | KMD-017 |
+| KMD-018 | Validate a new ticket's body has the sections it needs | medium | KMD-011 (inbox), KMD-017 (done) |
+| KMD-019 | Keep apostrophes from splitting words in ticket filenames | low | KMD-017 (done) |
 
 ### Interface
 
@@ -35,20 +35,20 @@ Source: .kanban/tickets/*.md
 | KMD-012 | Archive a ticket by dragging it out of the board | medium | — |
 | KMD-013 | Edit ticket fields from the drawer | medium | — |
 | KMD-015 | Warn when starting a ticket with unfinished blockers | low | — |
-| KMD-016 | Choose a ticket type and get a matching body template | low | KMD-011 |
-| KMD-020 | Only flag a card as blocked when a blocker is unfinished | low | — |
+| KMD-016 | Choose a ticket type and get a matching body template | low | KMD-011 (inbox) |
 
 ## Done
 
 | ID | Ticket | Category | Intervention | Blocked by |
 |---|---|---|---|---|
 | KMD-001 | Define the portable Markdown schema | Product | medium | — |
-| KMD-002 | Read and write a local `.kanban` directory | Storage | low | KMD-001 |
-| KMD-003 | Generate the agent board summary | Storage | low | KMD-002 |
-| KMD-004 | Add drag-and-drop movement | Interface | low | KMD-002 |
+| KMD-002 | Read and write a local `.kanban` directory | Storage | low | KMD-001 (done) |
+| KMD-003 | Generate the agent board summary | Storage | low | KMD-002 (done) |
+| KMD-004 | Add drag-and-drop movement | Interface | low | KMD-002 (done) |
 | KMD-006 | Sync portable tools into a target project | Storage | low | — |
 | KMD-007 | Open a project from a startup path argument | Interface | low | — |
 | KMD-017 | Create tickets through a tool instead of by hand | Storage | low | — |
+| KMD-020 | Only flag a card as blocked when a blocker is unfinished | Interface | low | — |
 
 ## Archive
 

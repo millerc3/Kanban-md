@@ -143,10 +143,24 @@ function ticketCard(ticket) {
   if (ticket.type) meta.append(element("span", "", ticket.type));
   card.append(meta);
 
-  if (ticket.blocked_by?.length) {
-    card.append(element("span", "dependency", `Blocked by ${ticket.blocked_by.join(", ")}`));
-  }
+  const blockers = ticket.blockers ?? [];
+  if (blockers.length) card.append(dependencyLine(blockers));
   return card;
+}
+
+// The server decides each blocker's state; this only chooses how to say it.
+function dependencyLine(blockers) {
+  const outstanding = blockers.filter((blocker) => blocker.state !== "satisfied");
+  const line = element("span", `dependency ${outstanding.length ? "dependency-blocked" : "dependency-clear"}`);
+  line.append(element("span", "dependency-label", outstanding.length ? "Blocked by" : "After"));
+  for (const blocker of blockers) {
+    const chip = element("span", `blocker blocker-${blocker.state}`, blocker.id);
+    chip.title = blocker.state === "unknown"
+      ? `${blocker.id} — no matching ticket`
+      : `${blocker.id} — ${blocker.status}`;
+    line.append(chip);
+  }
+  return line;
 }
 
 function makeColumn(status, tickets) {
